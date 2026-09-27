@@ -664,6 +664,12 @@ export function createApp(
       : null;
   const publicApi = new Hono();
   publicApi.use("*", async (context, next) => {
+    if (PLUGIN_WIRE_HTTP_PATH.test(context.req.path)) {
+      // Wire paths carry their own authorization (plugin-wire-auth.ts),
+      // including local-mode origin checks where the plugin declares them —
+      // so the origin middleware must not double-check them here.
+      return next();
+    }
     const problem = browserRequestProblem(context, deps);
     if (problem !== null) {
       throw new ApiError(problem.status, "forbidden_origin", problem.error);
@@ -691,7 +697,13 @@ export function createApp(
   registerSystemRoutes(publicApi, deps, pluginService);
   registerUiPreferenceRoutes(publicApi, deps);
   registerPluginCatalogRoutes(publicApi, pluginCatalogService);
-  registerPluginRoutes(publicApi, deps, pluginService, upgradeWebSocket);
+  registerPluginRoutes(
+    publicApi,
+    deps,
+    pluginService,
+    upgradeWebSocket,
+    publicApiCapability,
+  );
   registerSkillsRegistryRoutes(publicApi, deps);
   // Capability gate for every /api/v1 route. Registered on the root app —
   // not the publicApi sub-app — so coverage does not depend on which Hono

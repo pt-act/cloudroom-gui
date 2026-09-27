@@ -9,6 +9,9 @@ import {
   type TestAppHarness,
 } from "../../helpers/test-app.js";
 import { createMockHubSocket } from "../../helpers/mock-hub-socket.js";
+import { pluginWireAuthProblem } from "../../../src/routes/plugin-wire-auth.js";
+import { PUBLIC_API_CAPABILITY_FILE_NAME } from "../../../src/services/public-api-capability.js";
+import { readFile } from "node:fs/promises";
 
 const BASE = "http://127.0.0.1:3334";
 const EVIL_ORIGIN = "https://evil.example";
@@ -965,5 +968,121 @@ describe("plugin WebSocket routes", () => {
       code: 1012,
       reason: "Plugin reloaded or disabled",
     });
+  });
+});
+
+describe("plugin wire authorization scoping (TG2.1)", () => {
+  let harness: TestAppHarness;
+  let rootDir: string;
+
+  beforeEach(async () => {
+    harness = await createTestAppHarness({
+      requirePublicApiCapability: true,
+      devAppPort: 5173,
+    });
+    rootDir = await writePlugin(join(harness.config.dataDir, "fixtures"), {
+      name: "bb-plugin-wire",
+      serverSource: WIRE_SOURCE,
+    });
+    const entry = await harness.pluginService.installPath(rootDir);
+    expect(entry.status).toBe("running");
+  });
+
+  afterEach(async () => {
+    await harness.pluginService.stop();
+    await harness.cleanup();
+  });
+
+  async function readCapabilityToken(): Promise<string> {
+    return (
+      await readFile(
+        join(harness.config.dataDir, PUBLIC_API_CAPABILITY_FILE_NAME),
+        "utf8",
+      )
+    ).trim();
+  }
+
+  it("capability binding: the per-install credential satisfies every wire auth mode", async () => {
+    const token = await readCapabilityToken();
+    const capability = { "x-bb-capability": token };
+
+    // token mode, no plugin token presented
+    const guarded = await harness.app.request(
+      `${BASE}/api/v1/plugins/wire/http/guarded`,
+      { headers: capability },
+    );
+    expect(guarded.status).toBe(200);
+    expect(await guarded.json()).toEqual({ guarded: true });
+
+    // local mode, hostile origin — the operator credential overrides
+    const local = await harness.app.request(
+      `${BASE}/api/v1/plugins/wire/http/hello`,
+      { headers: { ...capability, origin: EVIL_ORIGIN } },
+    );
+    expect(local.status).toBe(200);
+
+    // none mode stays reachable
+    const open = await harness.app.request(
+      `${BASE}/api/v1/plugins/wire/http/open`,
+      { headers: capability },
+    );
+    expect(open.status).toBe(200);
+  });
+
+  it("without the capability, existing wire auth is unchanged", async () => {
+    const denied = await harness.app.request(
+      `${BASE}/api/v1/plugins/wire/http/guarded`,
+    );
+    expect(denied.status).toBe(401);
+  });
+
+  it("scoping: a token minted for one plugin never authorizes another plugin's route", async () => {
+    const secondRoot = await writePlugin(
+      join(harness.config.dataDir, "fixtures"),
+      { name: "bb-plugin-wire-two", serverSource: WIRE_SOURCE },
+    );
+    const second = await harness.pluginService.installPath(secondRoot);
+    expect(second.status).toBe("running");
+
+    const issued = await harness.app.request(
+      `${BASE}/api/v1/plugins/wire/token`,
+      { method: "POST" },
+    );
+    const { token: wireToken } = (await issued.json()) as { token: string };
+
+    const crossPlugin = await harness.app.request(
+      `${BASE}/api/v1/plugins/wire-two/http/guarded`,
+      { headers: { "x-bb-plugin-token": wireToken } },
+    );
+    expect(crossPlugin.status).toBe(401);
+
+    // the correct plugin token still works
+    const twoToken = await harness.pluginService.httpToken("wire-two");
+    expect(twoToken).toBeDefined();
+    const samePlugin = await harness.app.request(
+      `${BASE}/api/v1/plugins/wire-two/http/guarded`,
+      { headers: { "x-bb-plugin-token": twoToken as string } },
+    );
+    expect(samePlugin.status).toBe(200);
+  });
+
+  it("unknown auth modes fail closed", async () => {
+    const problem = await pluginWireAuthProblem({
+      context: {
+        req: {
+          url: "http://127.0.0.1/x",
+          method: "GET",
+          header: () => undefined,
+          query: () => undefined,
+        },
+      },
+      deps: { config: { serverPort: 1 } },
+      plugins: { httpToken: async () => undefined },
+      pluginId: "wire",
+      auth: "weird" as never,
+      capability: null,
+    });
+    expect(problem).not.toBeNull();
+    expect(problem?.status).toBe(401);
   });
 });

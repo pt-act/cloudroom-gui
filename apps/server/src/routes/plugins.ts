@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { brotliCompress, constants as zlibConstants, gzip } from "node:zlib";
@@ -12,9 +11,10 @@ import type {
 import type { ServerRuntimeConfig } from "../types.js";
 import { ApiError } from "../errors.js";
 import {
-  browserRequestProblem,
-  type BrowserRequestProblem,
-} from "../browser-request-guard.js";
+  localWireAuthProblem,
+  pluginWireAuthProblem,
+} from "./plugin-wire-auth.js";
+import type { PublicApiCapabilityService } from "../services/public-api-capability.js";
 import type {
   PluginService,
   PluginWireLookup,
@@ -47,7 +47,7 @@ interface PluginRoutesDeps {
   db: import("@bb/db").DbConnection;
 }
 
-type WireAuthProblem = BrowserRequestProblem | { status: 401; error: string };
+const localAuthProblem = localWireAuthProblem;
 type UpgradeWebSocket = ReturnType<
   typeof createNodeWebSocket
 >["upgradeWebSocket"];
@@ -130,49 +130,10 @@ function parsePluginMentionTrigger(
   }
 }
 
-function localAuthProblem(
-  context: Context,
-  deps: PluginRoutesDeps,
-): WireAuthProblem | null {
-  return browserRequestProblem(context, deps, {
-    requireJsonForMutation: true,
-  });
-}
-
 function isStringArray(value: unknown): value is string[] {
   return (
     Array.isArray(value) && value.every((entry) => typeof entry === "string")
   );
-}
-
-function timingSafeEqualStrings(a: string, b: string): boolean {
-  const bufferA = Buffer.from(a, "utf8");
-  const bufferB = Buffer.from(b, "utf8");
-  return bufferA.length === bufferB.length && timingSafeEqual(bufferA, bufferB);
-}
-
-async function tokenAuthProblem(
-  context: Context,
-  plugins: PluginService,
-  id: string,
-): Promise<WireAuthProblem | null> {
-  const presented =
-    context.req.header("x-bb-plugin-token") ?? context.req.query("token");
-  const expected = await plugins.httpToken(id);
-  if (
-    expected === undefined ||
-    presented === undefined ||
-    !timingSafeEqualStrings(presented, expected)
-  ) {
-    return {
-      status: 401,
-      error:
-        'missing or invalid plugin token — send it as the "x-bb-plugin-token" header ' +
-        "or ?token=; print it with `bb plugin token " +
-        `${id}\``,
-    };
-  }
-  return null;
 }
 
 function pluginHttpSubPath(context: Context, id: string): string {
@@ -314,6 +275,7 @@ export function registerPluginRoutes(
   deps: PluginRoutesDeps,
   plugins: PluginService,
   upgradeWebSocket?: UpgradeWebSocket,
+  capability: PublicApiCapabilityService | null = null,
 ): void {
   const appAssetCompressionCache = createAppAssetCompressionCache(
     MAX_CACHED_APP_ASSETS,
@@ -339,13 +301,14 @@ export function registerPluginRoutes(
         `plugin "${id}" has no websocket route for "${subPath}"`,
       );
     }
-    const auth = lookup.value.auth;
-    const problem =
-      auth === "local"
-        ? localAuthProblem(context, deps)
-        : auth === "token"
-          ? await tokenAuthProblem(context, plugins, id)
-          : null;
+    const problem = await pluginWireAuthProblem({
+      context,
+      deps,
+      plugins,
+      pluginId: id,
+      auth: lookup.value.auth,
+      capability,
+    });
     if (problem) {
       throw new ApiError(
         problem.status,
@@ -354,7 +317,7 @@ export function registerPluginRoutes(
       );
     }
     const fresh = plugins.getWebSocketRoute(id, subPath);
-    if (fresh.outcome !== "found" || fresh.value.auth !== auth) {
+    if (fresh.outcome !== "found" || fresh.value.auth !== lookup.value.auth) {
       throw new ApiError(
         503,
         "plugin_reloaded",
@@ -767,18 +730,19 @@ export function registerPluginRoutes(
         404,
       );
     }
-    const auth = lookup.value.auth;
-    const problem =
-      auth === "local"
-        ? localAuthProblem(context, deps)
-        : auth === "token"
-          ? await tokenAuthProblem(context, plugins, id)
-          : null;
+    const problem = await pluginWireAuthProblem({
+      context,
+      deps,
+      plugins,
+      pluginId: id,
+      auth: lookup.value.auth,
+      capability,
+    });
     if (problem) {
       return context.json({ ok: false, error: problem.error }, problem.status);
     }
     const fresh = plugins.getHttpRoute(id, context.req.method, subPath);
-    if (fresh.outcome !== "found" || fresh.value.auth !== auth) {
+    if (fresh.outcome !== "found" || fresh.value.auth !== lookup.value.auth) {
       return context.json(
         {
           ok: false,
