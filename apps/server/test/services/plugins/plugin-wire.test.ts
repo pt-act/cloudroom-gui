@@ -196,6 +196,7 @@ async function rpc(
 describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
   let harness: TestAppHarness;
   let rootDir: string;
+  let server: RunningTestServer | null = null;
 
   beforeEach(async () => {
     harness = await createTestAppHarness({ devAppPort: 5173 });
@@ -210,6 +211,11 @@ describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
   afterEach(async () => {
     await harness.pluginService.stop();
     await harness.cleanup();
+  });
+
+  afterEach(async () => {
+    await server?.close();
+    server = null;
   });
 
   it("serves a registered route for local requests (no origin, and app origins)", async () => {
@@ -266,9 +272,34 @@ describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
       { headers: { origin: "http://100.64.158.8:5173" } },
     );
     expect(directDev.status).toBe(200);
+  });
 
-    const proxiedDev = await harness.app.request(
+  it("honors x-forwarded-host only from trusted peers (TG2.2)", async () => {
+    // A synthetic request has no socket peer: an unknown peer must not be
+    // able to claim a trusted origin via forwarded headers.
+    const synthetic = await harness.app.request(
       `${BASE}/api/v1/plugins/wire/http/hello`,
+      {
+        headers: {
+          origin: "http://100.64.158.8:5173",
+          "x-forwarded-host": "100.64.158.8:5173",
+        },
+      },
+    );
+    expect(synthetic.status).toBe(403);
+
+    // In reality the dev Vite proxy connects from loopback, so its forwarded
+    // host is honored for plain browsers. startTestServer builds a fresh
+    // harness, so the fixture installs into it before the probe.
+    const proxyServer = await startTestServer({
+      requirePublicApiCapability: true,
+      devAppPort: 5173,
+    });
+    server = proxyServer;
+    const proxyInstall = await proxyServer.pluginService.installPath(rootDir);
+    expect(proxyInstall.status).toBe("running");
+    const proxiedDev = await fetch(
+      new URL("/api/v1/plugins/wire/http/hello", proxyServer.baseUrl),
       {
         headers: {
           origin: "http://100.64.158.8:5173",
@@ -974,6 +1005,7 @@ describe("plugin WebSocket routes", () => {
 describe("plugin wire authorization scoping (TG2.1)", () => {
   let harness: TestAppHarness;
   let rootDir: string;
+  let server: RunningTestServer | null = null;
 
   beforeEach(async () => {
     harness = await createTestAppHarness({
@@ -989,6 +1021,8 @@ describe("plugin wire authorization scoping (TG2.1)", () => {
   });
 
   afterEach(async () => {
+    await server?.close();
+    server = null;
     await harness.pluginService.stop();
     await harness.cleanup();
   });
@@ -1066,23 +1100,67 @@ describe("plugin wire authorization scoping (TG2.1)", () => {
     expect(samePlugin.status).toBe(200);
   });
 
-  it("unknown auth modes fail closed", async () => {
-    const problem = await pluginWireAuthProblem({
-      context: {
-        req: {
-          url: "http://127.0.0.1/x",
-          method: "GET",
-          header: () => undefined,
-          query: () => undefined,
+  it("unknown auth modes fail closed (verdict-04 advisory: permanent six-mode check)", async () => {
+    // Verdict round 4: the validator probed weird, "", LOCAL, None,
+    // "token " (trailing space), and admin — all must 401, never normalize
+    // or fall through to open, on a capability-exempt surface.
+    for (const auth of ["weird", "", "LOCAL", "None", "token ", "admin"]) {
+      const problem = await pluginWireAuthProblem({
+        context: {
+          req: {
+            url: "http://127.0.0.1/x",
+            method: "GET",
+            header: () => undefined,
+            query: () => undefined,
+          },
         },
-      },
-      deps: { config: { serverPort: 1 } },
-      plugins: { httpToken: async () => undefined },
-      pluginId: "wire",
-      auth: "weird" as never,
-      capability: null,
+        deps: { config: { serverPort: 1 } },
+        plugins: { httpToken: async () => undefined },
+        pluginId: "wire",
+        auth: auth as never,
+        capability: null,
+      });
+      expect(problem).not.toBeNull();
+      expect(problem?.status).toBe(401);
+    }
+  });
+
+  it("fail-closed holds at both dispatch points for unrecognized modes", async () => {
+    // Both wire dispatch points must refuse an unrecognized mode: a spy
+    // plants an out-of-contract route record past registration validation.
+    const weird = {
+      outcome: "found" as const,
+      value: { auth: "weird" as never },
+    } as unknown as Awaited<
+      ReturnType<typeof harness.pluginService.getHttpRoute>
+    >;
+    const httpSpy = vi
+      .spyOn(harness.pluginService, "getHttpRoute")
+      .mockReturnValue(weird);
+    const httpDenied = await harness.app.request(
+      `${BASE}/api/v1/plugins/wire/http/hello`,
+    );
+    expect(httpDenied.status).toBe(401);
+    httpSpy.mockRestore();
+
+    const wsServer = await startTestServer({
+      requirePublicApiCapability: true,
+      devAppPort: 5173,
     });
-    expect(problem).not.toBeNull();
-    expect(problem?.status).toBe(401);
+    server = wsServer;
+    const wsInstall = await wsServer.pluginService.installPath(rootDir);
+    expect(wsInstall.status).toBe("running");
+    const wsSpy = vi
+      .spyOn(wsServer.pluginService, "getWebSocketRoute")
+      .mockReturnValue(
+        weird as Awaited<
+          ReturnType<typeof wsServer.pluginService.getWebSocketRoute>
+        >,
+      );
+    const wsDenied = await rejectedPluginWebSocketStatus(
+      pluginWebSocketUrl(wsServer.baseUrl, "/socket"),
+    );
+    expect(wsDenied).toBe(401);
+    wsSpy.mockRestore();
   });
 });

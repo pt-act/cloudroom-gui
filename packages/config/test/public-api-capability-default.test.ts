@@ -34,3 +34,19 @@ describe("public api capability default", () => {
     expect(config.BB_REQUIRE_PUBLIC_API_CAPABILITY).toBe(false);
   });
 });
+
+describe("trusted proxies config", () => {
+  it("parses a comma-separated list", () => {
+    const config = loadServerConfig({
+      env: createServerRuntimeEnv({ BB_TRUSTED_PROXIES: "10.0.0.1, 10.0.0.2" }),
+    });
+    expect(config.BB_TRUSTED_PROXIES).toEqual(["10.0.0.1", "10.0.0.2"]);
+  });
+
+  it("is unset by default (loopback-only trust)", () => {
+    const config = loadServerConfig({
+      env: createServerRuntimeEnv(),
+    });
+    expect(config.BB_TRUSTED_PROXIES).toBeUndefined();
+  });
+});

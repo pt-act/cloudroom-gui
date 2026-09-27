@@ -30,6 +30,7 @@ interface PluginWireAuthDeps {
     serverPort: number;
     appUrl?: string;
     devAppPort?: number;
+    trustedProxies?: readonly string[];
   };
 }
 
@@ -42,6 +43,7 @@ interface PluginWireTokenSource {
 
 export interface PluginWireAuthArgs {
   context: Context | WireAuthContext;
+  trustedRemoteAddress?: string;
   deps: PluginWireAuthDeps;
   plugins: PluginWireTokenSource;
   pluginId: string;
@@ -58,10 +60,14 @@ export interface PluginWireAuthArgs {
 export function localWireAuthProblem(
   context: WireAuthContext,
   deps: PluginWireAuthDeps,
+  trustedRemoteAddress?: string,
 ): WireAuthProblem | null {
-  return browserRequestProblem(context, deps, {
-    requireJsonForMutation: true,
-  });
+  return browserRequestProblem(
+    context,
+    deps,
+    { requireJsonForMutation: true },
+    trustedRemoteAddress,
+  );
 }
 
 function timingSafeEqualStrings(a: string, b: string): boolean {
@@ -116,7 +122,11 @@ export async function pluginWireAuthProblem(
   }
   switch (args.auth) {
     case "local":
-      return localWireAuthProblem(context, args.deps);
+      return localWireAuthProblem(
+        context,
+        args.deps,
+        args.trustedRemoteAddress,
+      );
     case "token":
       return pluginTokenAuthProblem(context, args.plugins, args.pluginId);
     case "none":

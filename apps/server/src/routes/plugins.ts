@@ -43,9 +43,14 @@ import {
 } from "@bb/server-contract";
 
 interface PluginRoutesDeps {
-  config: Pick<ServerRuntimeConfig, "serverPort" | "appUrl" | "devAppPort">;
+  config: Pick<
+    ServerRuntimeConfig,
+    "serverPort" | "appUrl" | "devAppPort" | "trustedProxies"
+  >;
   db: import("@bb/db").DbConnection;
 }
+
+import { getTrustedRemoteAddress } from "../request-context.js";
 
 const localAuthProblem = localWireAuthProblem;
 type UpgradeWebSocket = ReturnType<
@@ -308,6 +313,7 @@ export function registerPluginRoutes(
       pluginId: id,
       auth: lookup.value.auth,
       capability,
+      trustedRemoteAddress: getTrustedRemoteAddress(context),
     });
     if (problem) {
       throw new ApiError(
@@ -361,7 +367,11 @@ export function registerPluginRoutes(
   );
 
   app.get("/plugins/mentions/search", async (context) => {
-    const problem = localAuthProblem(context, deps);
+    const problem = localAuthProblem(
+      context,
+      deps,
+      getTrustedRemoteAddress(context),
+    );
     if (problem) {
       return context.json({ ok: false, error: problem.error }, problem.status);
     }
@@ -391,7 +401,11 @@ export function registerPluginRoutes(
   });
 
   app.post("/plugins/:id/cli", async (context) => {
-    const authProblem = localAuthProblem(context, deps);
+    const authProblem = localAuthProblem(
+      context,
+      deps,
+      getTrustedRemoteAddress(context),
+    );
     if (authProblem) {
       return context.json(
         { ok: false, error: authProblem.error },
@@ -559,7 +573,11 @@ export function registerPluginRoutes(
   });
 
   app.post("/plugins/install", async (context) => {
-    const problem = localAuthProblem(context, deps);
+    const problem = localAuthProblem(
+      context,
+      deps,
+      getTrustedRemoteAddress(context),
+    );
     if (problem) {
       return context.json({ ok: false, error: problem.error }, problem.status);
     }
@@ -737,6 +755,7 @@ export function registerPluginRoutes(
       pluginId: id,
       auth: lookup.value.auth,
       capability,
+      trustedRemoteAddress: getTrustedRemoteAddress(context),
     });
     if (problem) {
       return context.json({ ok: false, error: problem.error }, problem.status);
@@ -758,7 +777,11 @@ export function registerPluginRoutes(
     const id = context.req.param("id");
     const method = context.req.param("method");
     context.header("Cache-Control", "no-store");
-    const problem = localAuthProblem(context, deps);
+    const problem = localAuthProblem(
+      context,
+      deps,
+      getTrustedRemoteAddress(context),
+    );
     if (problem) {
       return context.json({ ok: false, error: problem.error }, problem.status);
     }

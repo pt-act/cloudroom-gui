@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import { extname, join, resolve } from "node:path";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { terminalWebSocketQuerySchema } from "@bb/server-contract";
 import { compress } from "hono/compress";
 import { cors } from "hono/cors";
@@ -62,6 +62,7 @@ import {
 } from "./internal/auth.js";
 import {
   captureTrustedRemoteAddress,
+  getTrustedRemoteAddress,
   resolveRequestAppSurface,
 } from "./request-context.js";
 import { runEventLoopWork } from "./services/system/event-loop-work.js";
@@ -670,7 +671,12 @@ export function createApp(
       // so the origin middleware must not double-check them here.
       return next();
     }
-    const problem = browserRequestProblem(context, deps);
+    const problem = browserRequestProblem(
+      context,
+      deps,
+      {},
+      getTrustedRemoteAddress(context),
+    );
     if (problem !== null) {
       throw new ApiError(problem.status, "forbidden_origin", problem.error);
     }
@@ -753,9 +759,7 @@ export function createApp(
   registerInternalInteractiveRequestRoutes(internalApi, deps);
   app.route("/internal", internalApi);
 
-  const assertBrowserWebSocketAllowed = (
-    context: Parameters<typeof browserRequestProblem>[0],
-  ): void => {
+  const assertBrowserWebSocketAllowed = (context: Context): void => {
     if (
       publicApiCapability !== null &&
       !publicApiCapability.verify(
@@ -769,7 +773,12 @@ export function createApp(
         false,
       );
     }
-    const problem = browserRequestProblem(context, deps);
+    const problem = browserRequestProblem(
+      context,
+      deps,
+      {},
+      getTrustedRemoteAddress(context),
+    );
     if (problem !== null) {
       throw new ApiError(
         problem.status,

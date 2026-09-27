@@ -94,6 +94,7 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
     isDevelopment: !isProduction,
     openAiApiKey: serverConfig.OPENAI_API_KEY,
     requirePublicApiCapability: serverConfig.BB_REQUIRE_PUBLIC_API_CAPABILITY,
+    trustedProxies: serverConfig.BB_TRUSTED_PROXIES,
     serverPort: serverConfig.BB_SERVER_PORT,
     sharedSkillRoots: { user: [], project: [] },
     transcriptionModel: serverConfig.BB_TRANSCRIPTION,

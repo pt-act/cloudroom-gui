@@ -41,6 +41,7 @@ export interface ServerRuntimeConfig {
   devAppPort?: number;
   launchId?: string;
   requirePublicApiCapability?: boolean;
+  trustedProxies?: readonly string[];
 }
 
 export interface AppDeps {

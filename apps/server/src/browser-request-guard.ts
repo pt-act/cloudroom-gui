@@ -6,6 +6,7 @@ import type { ServerRuntimeConfig } from "./types.js";
 
 interface BrowserRequestGuardDeps {
   config: Pick<ServerRuntimeConfig, "serverPort" | "appUrl" | "devAppPort">;
+  trustedProxies?: readonly string[];
 }
 
 export interface BrowserRequestProblem {
@@ -17,12 +18,20 @@ interface BrowserRequestGuardOptions {
   requireJsonForMutation?: boolean;
 }
 
+import { isLoopbackAddress } from "@bb/config/loopback";
+
 interface BrowserRequestContext {
   req: {
     url: string;
     method: string;
     header(name: string): string | undefined;
   };
+  /**
+   * Direct socket peer address, when the caller knows it (captured from the
+   * connection by request-context). Forwarded identity headers are honored
+   * only when this peer is trusted (TG2.2).
+   */
+  trustedRemoteAddress?: string;
 }
 
 export function allowedAppOrigins(deps: BrowserRequestGuardDeps): Set<string> {
@@ -75,16 +84,40 @@ function parseRequestHost(host: string, protocol: string): URL | null {
   }
 }
 
-function requestTargets(context: BrowserRequestContext): URL[] {
+// TG2.2: forwarded identity headers are honored only when the direct peer
+// is a trusted proxy — loopback by default, plus explicitly configured
+// addresses. A peer that can reach the port directly cannot forge its way
+// into a trusted-origin claim.
+function isTrustedProxyPeer(
+  context: BrowserRequestContext,
+  deps: BrowserRequestGuardDeps,
+): boolean {
+  const peer = context.trustedRemoteAddress;
+  if (peer === undefined) {
+    return false;
+  }
+  if (isLoopbackAddress(peer)) {
+    return true;
+  }
+  return (deps.trustedProxies ?? []).includes(peer);
+}
+
+function requestTargets(
+  context: BrowserRequestContext,
+  deps: BrowserRequestGuardDeps,
+): URL[] {
   const requestUrl = new URL(context.req.url);
   const targets = [requestUrl];
   const forwardedProtocol =
     context.req.header("x-forwarded-proto")?.split(",", 1)[0]?.trim() ||
     requestUrl.protocol.replace(/:$/u, "");
 
+  const trustForwarded = isTrustedProxyPeer(context, deps);
   for (const rawHost of [
     context.req.header("host"),
-    context.req.header("x-forwarded-host")?.split(",", 1)[0]?.trim(),
+    trustForwarded
+      ? context.req.header("x-forwarded-host")?.split(",", 1)[0]?.trim()
+      : undefined,
   ]) {
     if (rawHost === undefined || rawHost.length === 0) {
       continue;
@@ -119,7 +152,7 @@ function isTrustedOrigin(
     return true;
   }
 
-  const targets = requestTargets(context);
+  const targets = requestTargets(context, deps);
   if (targets.some((target) => target.origin === originUrl.origin)) {
     return true;
   }
@@ -142,22 +175,27 @@ export function browserRequestProblem(
   context: BrowserRequestContext,
   deps: BrowserRequestGuardDeps,
   options: BrowserRequestGuardOptions = {},
+  trustedRemoteAddress?: string,
 ): BrowserRequestProblem | null {
-  const origin = context.req.header("origin");
-  if (origin !== undefined && !isTrustedOrigin(context, deps, origin)) {
+  const guardedContext: BrowserRequestContext =
+    trustedRemoteAddress === undefined
+      ? context
+      : { req: context.req, trustedRemoteAddress };
+  const origin = guardedContext.req.header("origin");
+  if (origin !== undefined && !isTrustedOrigin(guardedContext, deps, origin)) {
     return {
       status: 403,
       error: `origin "${origin}" is not a local BB app origin`,
     };
   }
 
-  const method = context.req.method.toUpperCase();
+  const method = guardedContext.req.method.toUpperCase();
   if (
     options.requireJsonForMutation === true &&
     method !== "GET" &&
     method !== "HEAD" &&
     method !== "OPTIONS" &&
-    !isJsonContentType(context.req.header("content-type"))
+    !isJsonContentType(guardedContext.req.header("content-type"))
   ) {
     return {
       status: 415,

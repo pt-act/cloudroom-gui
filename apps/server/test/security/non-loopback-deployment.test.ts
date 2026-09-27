@@ -48,7 +48,11 @@ function nonLoopbackLocalAddress(): string | null {
 }
 
 async function requestStatus(
-  args: { method?: string; path: string } = { path: "/api/v1/threads" },
+  args: {
+    method?: string;
+    path: string;
+    headers?: Record<string, string>;
+  } = { path: "/api/v1/threads" },
 ): Promise<number> {
   return new Promise((resolve, reject) => {
     const request = http.request(
@@ -59,7 +63,7 @@ async function requestStatus(
         path: args.path,
         method: args.method ?? "GET",
         setHost: false,
-        headers: { host: `${bindAddress}:${externalPort}` },
+        headers: { host: `${bindAddress}:${externalPort}`, ...args.headers },
       },
       (response) => {
         response.resume();
@@ -140,6 +144,60 @@ describe.skipIf(skipReason !== null)(
       const status = await requestStatus({ path: "/api/v1/hosts" });
       expect(status).toBe(401);
     });
+
+    it("ignores forged forwarded headers from the non-loopback peer (TG2.2)", async () => {
+      // A dedicated flag-off harness isolates the origin layer: a LAN peer
+      // forges both a trusted origin and a matching X-Forwarded-Host.
+      // Pre-TG2.2 this passed the origin check; now forwarded headers from
+      // an untrusted peer are ignored and the origin middleware 403s.
+      const originHarness = await startTestServer({
+        requirePublicApiCapability: false,
+      });
+      let forgedPort = 0;
+      try {
+        const { createApp } = await import("../../src/server.js");
+        const { app } = createApp(originHarness.deps);
+        const forgedServer = serve(
+          {
+            hostname: bindAddress,
+            port: 0,
+            fetch: app.fetch,
+          },
+          (info) => {
+            forgedPort = info.port;
+          },
+        );
+        try {
+          const deadline = Date.now() + 10_000;
+          while (forgedPort === 0 && Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+
+          // The forwarded-host target is only trusted when it arrives from
+          // a trusted proxy peer. A non-loopback peer claiming a dev-app
+          // origin via X-Forwarded-Host must not have that claim honored:
+          // pre-TG2.2 this request passed the origin check (the forwarded
+          // target matched the forged origin); now it 403s.
+          const forged = await fetch(
+            new URL("/api/v1/threads", `http://${bindAddress}:${forgedPort}`),
+            {
+              headers: {
+                origin: "http://100.64.158.8:5173",
+                "x-forwarded-host": "100.64.158.8:5173",
+              },
+            },
+          );
+          await forged.text();
+          expect(forged.status).toBe(403);
+        } finally {
+          await new Promise<void>((resolve) => {
+            forgedServer.close(() => resolve());
+          });
+        }
+      } finally {
+        await originHarness.close();
+      }
+    }, 30_000);
 
     it("gates the former bootstrap path for the non-loopback peer", async () => {
       // No issuance route exists; the gate 401s the path before any fallback.

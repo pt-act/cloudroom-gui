@@ -42,6 +42,8 @@ The local server's `/api/v1` API and browser WebSocket are served for the local 
 - **Non-loopback binding is refused at startup.** `BB_SERVER_BIND_HOST=0.0.0.0` fails with a fatal error unless `BB_SERVER_ALLOW_NON_LOOPBACK=1` is set explicitly. The Connect gateway is the supported remote-access path; this flag only unblocks development proxies and must never be used to expose the API to a network.
 - **Per-install capability token (required by default).** Every `/api/v1` request and WebSocket upgrade must present the token (`x-bb-capability: <token>` or `Authorization: Bearer <token>`). The token is auto-generated in `<BB_DATA_DIR>/public-api-capability` with `0600` permissions and is a secret between local processes: it is never served over HTTP, so ambient local processes cannot obtain it. Local clients authenticate themselves — the desktop shell injects it into the app's requests, `pnpm dev`'s Vite proxy injects it for plain browsers, the CLI reads the token file automatically (loopback servers only), and Node SDK clients accept a `capability` option. Set `BB_REQUIRE_PUBLIC_API_CAPABILITY=0` to disable the gate (not recommended).
 
+Forwarded identity headers (`X-Forwarded-Host`/`X-Forwarded-Proto`) are honored only from loopback peers (e.g. the dev Vite proxy) or addresses listed in `BB_TRUSTED_PROXIES`; a peer reaching the server directly cannot use them to claim a trusted origin.
+
 The host daemon and Connect connections have their own authentication (bearer keys, signed sessions) and are unaffected by these flags.
 
 ## Checks

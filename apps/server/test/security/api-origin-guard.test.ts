@@ -2,6 +2,7 @@ import http from "node:http";
 import { createNodeBbSdk } from "@bb/sdk/node";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  createTestAppHarness,
   startTestServer,
   type RunningTestServer,
 } from "../helpers/test-app.js";
@@ -169,6 +170,25 @@ describe("/api/v1 browser origin guard", () => {
         host: `[::1]:${port}`,
       }),
     ).toBe(200);
+  });
+
+  it("ignores forwarded identity headers when no socket peer is known (TG2.2)", async () => {
+    // Synthetic requests (no socket peer) are untrusted by definition: a
+    // forwarded host must not establish a trusted origin claim.
+    const harness = await createTestAppHarness({
+      requirePublicApiCapability: false,
+    });
+    try {
+      const response = await harness.app.request("/api/v1/threads", {
+        headers: {
+          origin: "https://bb.lan.test",
+          "x-forwarded-host": "bb.lan.test",
+        },
+      });
+      expect(response.status).toBe(403);
+    } finally {
+      await harness.cleanup();
+    }
   });
 
   it("requires a rewriting proxy to send X-Forwarded-Host", async () => {

@@ -104,6 +104,17 @@ export function parseServerBindHost(value: string): ServerBindHost {
   throw new Error('BB_SERVER_BIND_HOST must be "127.0.0.1" or "0.0.0.0"');
 }
 
+function parseTrustedProxiesEnvValue(args: EnvVarParseArgs): string[] {
+  const entries = args.value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  if (entries.length === 0) {
+    throw new Error(`${args.name} must list at least one proxy address`);
+  }
+  return entries;
+}
+
 function parseServerBindHostEnvValue(args: EnvVarParseArgs): ServerBindHost {
   return parseServerBindHost(args.value);
 }
@@ -170,6 +181,13 @@ export const BB_REQUIRE_PUBLIC_API_CAPABILITY_ENV = defineEnvVar<boolean>({
     "Require the per-install capability token on every /api/v1 request and browser WebSocket (hardens against untrusted local processes)",
   name: "BB_REQUIRE_PUBLIC_API_CAPABILITY",
   parse: parseBooleanEnvValue,
+});
+
+export const BB_TRUSTED_PROXIES_ENV = defineEnvVar<string[]>({
+  description:
+    "Comma-separated direct peer addresses trusted as rewriting proxies (X-Forwarded-Host/Proto honored); loopback peers are always trusted",
+  name: "BB_TRUSTED_PROXIES",
+  parse: parseTrustedProxiesEnvValue,
 });
 
 export const BB_HOST_DAEMON_PORT_ENV = defineEnvVar<number>({

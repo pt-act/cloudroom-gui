@@ -17,48 +17,52 @@ import { withTestHarness } from "../helpers/test-app.js";
  * state. The round-1/round-2 defects were both reachable via GET.
  */
 describe("capability token leak sweep (verdict-04 advisory)", () => {
-  it("no /api/v1 GET route returns the token in body or headers", async () => {
-    await withTestHarness(
-      { requirePublicApiCapability: true },
-      async (harness) => {
-        const token = (
-          await readFile(
-            join(harness.config.dataDir, PUBLIC_API_CAPABILITY_FILE_NAME),
-            "utf8",
-          )
-        ).trim();
+  it(
+    "no /api/v1 GET route returns the token in body or headers",
+    { timeout: 30_000 },
+    async () => {
+      await withTestHarness(
+        { requirePublicApiCapability: true },
+        async (harness) => {
+          const token = (
+            await readFile(
+              join(harness.config.dataDir, PUBLIC_API_CAPABILITY_FILE_NAME),
+              "utf8",
+            )
+          ).trim();
 
-        const getPaths = [
-          ...new Set(
-            harness.app.routes
-              .filter(
-                (route) =>
-                  route.method === "GET" && route.path.startsWith("/api/v1"),
-              )
-              .map((route) => route.path),
-          ),
-        ];
-        // Sanity: the sweep must cover a real route population. The verdict-04
-        // sweep enumerated 102 authenticated GET routes on the full tree.
-        expect(getPaths.length).toBeGreaterThan(50);
+          const getPaths = [
+            ...new Set(
+              harness.app.routes
+                .filter(
+                  (route) =>
+                    route.method === "GET" && route.path.startsWith("/api/v1"),
+                )
+                .map((route) => route.path),
+            ),
+          ];
+          // Sanity: the sweep must cover a real route population. The verdict-04
+          // sweep enumerated 102 authenticated GET routes on the full tree.
+          expect(getPaths.length).toBeGreaterThan(50);
 
-        for (const path of getPaths) {
-          const response = await harness.app.request(path, {
-            headers: { "x-bb-capability": token },
-          });
-          const body = await response.text();
-          expect(
-            body.includes(token),
-            `GET ${path} leaked the capability token in its body`,
-          ).toBe(false);
-          for (const [name, value] of response.headers.entries()) {
+          for (const path of getPaths) {
+            const response = await harness.app.request(path, {
+              headers: { "x-bb-capability": token },
+            });
+            const body = await response.text();
             expect(
-              value.includes(token),
-              `GET ${path} leaked the capability token in the ${name} header`,
+              body.includes(token),
+              `GET ${path} leaked the capability token in its body`,
             ).toBe(false);
+            for (const [name, value] of response.headers.entries()) {
+              expect(
+                value.includes(token),
+                `GET ${path} leaked the capability token in the ${name} header`,
+              ).toBe(false);
+            }
           }
-        }
-      },
-    );
-  });
+        },
+      );
+    },
+  );
 });

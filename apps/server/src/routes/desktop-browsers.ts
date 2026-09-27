@@ -1,4 +1,5 @@
 import { browserRequestProblem } from "../browser-request-guard.js";
+import { getTrustedRemoteAddress } from "../request-context.js";
 import type { Hono } from "hono";
 import {
   desktopBrowserCreateRequestSchema,
@@ -31,9 +32,12 @@ export function registerDesktopBrowserRoutes(app: Hono, deps: AppDeps) {
   const routes = publicApiRoutes.desktopBrowsers;
   for (const route of Object.values(routes)) {
     app.use(route.path, async (context, next) => {
-      const problem = browserRequestProblem(context, deps, {
-        requireJsonForMutation: true,
-      });
+      const problem = browserRequestProblem(
+        context,
+        deps,
+        { requireJsonForMutation: true },
+        getTrustedRemoteAddress(context),
+      );
       if (problem)
         throw new ApiError(
           problem.status,

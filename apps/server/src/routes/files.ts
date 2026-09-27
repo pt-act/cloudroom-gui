@@ -1,6 +1,7 @@
 import path from "node:path";
+import { getTrustedRemoteAddress } from "../request-context.js";
 import { randomUUID } from "node:crypto";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import mimeTypes from "mime-types";
 import {
   publicApiRoutes,
@@ -169,12 +170,13 @@ export function registerFileRoutes(app: Hono, deps: AppDeps): void {
     return resolved;
   };
 
-  const requirePrivilegedJsonMutation = (
-    context: Parameters<typeof browserRequestProblem>[0],
-  ): void => {
-    const problem = browserRequestProblem(context, deps, {
-      requireJsonForMutation: true,
-    });
+  const requirePrivilegedJsonMutation = (context: Context): void => {
+    const problem = browserRequestProblem(
+      context,
+      deps,
+      { requireJsonForMutation: true },
+      getTrustedRemoteAddress(context),
+    );
     if (problem === null) {
       return;
     }

@@ -23,6 +23,7 @@ import {
   BB_MARKETPLACE_URL_ENV,
   BB_POSTHOG_API_KEY_ENV,
   BB_REQUIRE_PUBLIC_API_CAPABILITY_ENV,
+  BB_TRUSTED_PROXIES_ENV,
   BB_SERVER_ALLOW_NON_LOOPBACK_ENV,
   BB_SERVER_BIND_HOST_ENV,
   BB_SERVER_LAUNCH_ID_ENV,
@@ -66,6 +67,7 @@ export interface ServerConfig
   BB_MARKETPLACE_URL: string;
   BB_REQUIRE_PUBLIC_API_CAPABILITY: boolean;
   BB_SERVER_ALLOW_NON_LOOPBACK: boolean;
+  BB_TRUSTED_PROXIES?: string[];
   BB_SERVER_BIND_HOST: ServerBindHost;
   BB_SERVER_LAUNCH_ID?: string;
   BB_TELEMETRY: boolean;
@@ -175,6 +177,11 @@ export function loadServerConfig(
       context: loader.context,
       defaultValue: DEFAULT_BB_REQUIRE_PUBLIC_API_CAPABILITY,
       definition: BB_REQUIRE_PUBLIC_API_CAPABILITY_ENV,
+      env: loader.env,
+    }),
+    BB_TRUSTED_PROXIES: readOptionalEnvVar({
+      context: loader.context,
+      definition: BB_TRUSTED_PROXIES_ENV,
       env: loader.env,
     }),
     BB_SERVER_ALLOW_NON_LOOPBACK: readEnvVarWithDefault({
