@@ -12,7 +12,8 @@
     "generate:bb-official-marketplace": "node --conditions=source --import tsx scripts/generate-bb-official-marketplace.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
-    "test:provider-corpus": "vitest run --config vitest.config.ts test/provider-corpus"
+    "test:provider-corpus": "vitest run --config vitest.config.ts test/provider-corpus",
+    "test:integration": "vitest run --config vitest.config.ts test/security/non-loopback-deployment.test.ts"
   },
   "dependencies": {
     "@bb/config": "workspace:*",

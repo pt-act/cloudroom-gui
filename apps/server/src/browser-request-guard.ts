@@ -18,6 +18,22 @@ interface BrowserRequestGuardOptions {
   requireJsonForMutation?: boolean;
 }
 
+/**
+ * Browser-origin checks are CSRF hardening for browser clients, not an
+ * identity boundary. Two properties are inherent to origin-based CSRF
+ * defence and are relied on by AD-2026-09-27-plugin-none-mode:
+ * - a non-browser client that controls both Host and Origin passes this
+ *   check — the boundary against those is the per-install capability gate
+ *   (TG1), not this middleware;
+ * - a loopback peer can assert any origin it likes (the desktop shell and
+ *   dev proxy are loopback peers).
+ * X-Forwarded-Host is honored only from trusted proxy peers (TG2.2);
+ * X-Forwarded-Proto is read ungated below, but only shapes the forwarded
+ * Host target and is never trusted on its own — a peer without control of
+ * the forwarded Host gains nothing from spoofing it. That asymmetry is
+ * deliberate: gating proto as well would not change any outcome and risks
+ * breaking dev-proxy serving.
+ */
 import { isLoopbackAddress } from "@bb/config/loopback";
 
 interface BrowserRequestContext {
@@ -108,6 +124,9 @@ function requestTargets(
 ): URL[] {
   const requestUrl = new URL(context.req.url);
   const targets = [requestUrl];
+  // Read ungated (unlike x-forwarded-host): proto only shapes the forwarded
+  // Host target built below and grants no trust on its own. See the module
+  // header for the asymmetry rationale.
   const forwardedProtocol =
     context.req.header("x-forwarded-proto")?.split(",", 1)[0]?.trim() ||
     requestUrl.protocol.replace(/:$/u, "");
