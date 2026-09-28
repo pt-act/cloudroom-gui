@@ -234,6 +234,85 @@ describe("readHostFile (no ref — disk read)", () => {
       message: "Path is a directory, not a file",
     });
   });
+
+  it("rejects a symlink that points outside the read root", async () => {
+    const root = await makeTempDir("bb-read-file-containment-");
+    const outsideDir = await makeTempDir("bb-read-file-outside-");
+    const outsidePath = path.join(outsideDir, "private.html");
+    await fs.writeFile(outsidePath, "<h1>outside</h1>", "utf8");
+    await fs.symlink(outsidePath, path.join(root, "outside-link.html"));
+
+    await expect(
+      readHostFile({
+        type: "host.read_file",
+        path: path.join(root, "outside-link.html"),
+        rootPath: root,
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid_path",
+      message: expect.stringContaining("escapes read root"),
+    });
+  });
+
+  it("rejects a nested symlink that escapes through an in-root directory link", async () => {
+    const root = await makeTempDir("bb-read-file-nested-");
+    const outsideDir = await makeTempDir("bb-read-file-nested-outside-");
+    await fs.writeFile(
+      path.join(outsideDir, "secret.html"),
+      "<h1>secret</h1>",
+      "utf8",
+    );
+    await fs.mkdir(path.join(root, "docs"));
+    await fs.symlink(outsideDir, path.join(root, "docs", "external"));
+
+    await expect(
+      readHostFile({
+        type: "host.read_file",
+        path: path.join(root, "docs", "external", "secret.html"),
+        rootPath: root,
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid_path",
+      message: expect.stringContaining("escapes read root"),
+    });
+  });
+
+  it("allows an in-root symlink whose target stays inside the root", async () => {
+    const root = await makeTempDir("bb-read-file-in-root-link-");
+    const realPath = path.join(root, "reports", "real.html");
+    await fs.mkdir(path.dirname(realPath));
+    await fs.writeFile(realPath, "<h1>inside</h1>", "utf8");
+    await fs.symlink(realPath, path.join(root, "alias.html"));
+
+    const result = await readHostFile({
+      type: "host.read_file",
+      path: path.join(root, "alias.html"),
+      rootPath: root,
+    });
+
+    if ("notModified" in result) {
+      throw new Error("Unconditional read returned not modified");
+    }
+    expect(result.content).toBe("<h1>inside</h1>");
+  });
+
+  it("allows traversal that canonicalizes inside the read root", async () => {
+    const root = await makeTempDir("bb-read-file-canonical-");
+    const filePath = path.join(root, "reports", "report.html");
+    await fs.mkdir(path.dirname(filePath));
+    await fs.writeFile(filePath, "<h1>canonical</h1>", "utf8");
+
+    const result = await readHostFile({
+      type: "host.read_file",
+      path: path.join(root, "reports", "..", "reports", "report.html"),
+      rootPath: root,
+    });
+
+    if ("notModified" in result) {
+      throw new Error("Unconditional read returned not modified");
+    }
+    expect(result.content).toBe("<h1>canonical</h1>");
+  });
 });
 
 describe("readHostFileMetadata", () => {

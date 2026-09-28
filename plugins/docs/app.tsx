@@ -252,7 +252,9 @@ const HtmlEmbed = Node.create<HtmlEmbedOptions>({
       header.textContent = `◇ ${String(node.attrs.src)} · sandboxed`;
       const iframe = document.createElement("iframe");
       iframe.title = `Embedded HTML: ${String(node.attrs.src)}`;
-      iframe.setAttribute("sandbox", "allow-scripts");
+      // ME-6: untrusted document — empty sandbox denies scripts, same-origin
+      // access, forms, and popups.
+      iframe.setAttribute("sandbox", "");
       iframe.style.height = `${Math.min(1200, Math.max(120, Number(node.attrs.height) || 360))}px`;
       iframe.src = previewUrl(
         this.options.baseUrl,
@@ -822,7 +824,7 @@ function HtmlDocumentPanelBody({ document }: { document: DocumentRef }) {
   return (
     <iframe
       className="min-h-[32rem] flex-1 border-0 bg-white"
-      sandbox="allow-scripts"
+      sandbox=""
       title={document.title}
       src={`${state.baseUrl}/${encodePath(document.path)}`}
     />
@@ -1275,7 +1277,7 @@ function HtmlPane({
   return (
     <iframe
       className="min-h-0 flex-1 border-0 bg-white"
-      sandbox="allow-scripts"
+      sandbox=""
       title={filePath}
       src={`${lease.baseUrl}/${encodePath(filePath)}`}
     />

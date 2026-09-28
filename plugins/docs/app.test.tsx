@@ -965,7 +965,7 @@ describe("Docs nav panel", () => {
         "/api/v1/file-previews/lease/projects/_attachments/sketch.png",
       );
       const iframe = slot.container.querySelector("iframe");
-      expect(iframe?.getAttribute("sandbox")).toBe("allow-scripts");
+      expect(iframe?.getAttribute("sandbox")).toBe("");
       expect(iframe?.getAttribute("src")).toBe(
         "/api/v1/file-previews/lease/projects/report.html",
       );
@@ -1397,7 +1397,7 @@ describe("Docs nav panel", () => {
       expect(iframe?.getAttribute("src")).toBe(
         "/api/v1/file-previews/lease/dashboards/metrics.html",
       );
-      expect(iframe?.getAttribute("sandbox")).toBe("allow-scripts");
+      expect(iframe?.getAttribute("sandbox")).toBe("");
     });
     expect(slot.queryByRole("button", { name: "View source" })).toBeNull();
   });

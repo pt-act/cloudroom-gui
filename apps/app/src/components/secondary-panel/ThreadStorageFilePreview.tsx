@@ -19,7 +19,7 @@ import {
   isMarkdownFilePreview,
 } from "@bb/client-core";
 
-const GENERIC_HTML_IFRAME_SANDBOX = "allow-scripts";
+const GENERIC_HTML_IFRAME_SANDBOX = "";
 
 interface SecondaryPanelFilePreviewProps {
   activePath: string;

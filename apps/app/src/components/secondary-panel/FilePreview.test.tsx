@@ -521,7 +521,7 @@ describe("FilePreview", () => {
           kind: "html",
           file: { name: "progress-vis.html", contents: "<p>chart</p>" },
           iframe: {
-            sandbox: "allow-scripts",
+            sandbox: "",
             title: "docs/progress-vis.html",
             url: "/api/v1/threads/thr_1/worktree/files/docs/progress-vis.html",
           },
@@ -551,7 +551,7 @@ describe("FilePreview", () => {
           kind: "html",
           file: { name: "progress-vis.html", contents: "<p>chart</p>" },
           iframe: {
-            sandbox: "allow-scripts",
+            sandbox: "",
             title: "docs/progress-vis.html",
             url: "/api/v1/threads/thr_1/worktree/files/docs/progress-vis.html",
           },
@@ -592,7 +592,7 @@ describe("FilePreview", () => {
           path="docs/progress-vis.html"
           state={{
             kind: "iframe",
-            sandbox: "allow-scripts",
+            sandbox: "",
             title: "docs/progress-vis.html",
             url: "/api/v1/threads/thr_1/worktree/files/docs/progress-vis.html",
           }}
@@ -673,7 +673,7 @@ describe("FilePreview", () => {
             contents: "<!doctype html><h1>Report</h1>",
           },
           iframe: {
-            sandbox: "allow-scripts",
+            sandbox: "",
             title: "docs/report.html",
             url: "/preview/docs/report.html",
           },

@@ -4,7 +4,7 @@ Keep your notes, plans, and reports as plain Markdown files on disk, and edit th
 
 - A Docs panel with a folder tree, search, and a rich Markdown editor. Tables, images, and YAML frontmatter are supported.
 - Vaults. Each vault is a folder on a host. A new install starts with a Personal vault at `~/Notes`. Add vaults on other machines that are enrolled as bb hosts.
-- Full HTML pages and embedded HTML blocks render in a sandboxed frame. Keep interactive reports next to your notes.
+- Full HTML pages and embedded HTML blocks render in a sandboxed frame. Previews are inactive documents: scripts and form submission are disabled, so styling and images render but the page cannot run code or reach the network.
 - A Markdown opener for `.md` files from file links. Make it the default under Settings.
 - `@` mentions. Type `@` in the composer to attach a document. The agent gets its current content at send time.
 - Document cards in agent replies. The card opens the document in the thread side panel, with autosave.

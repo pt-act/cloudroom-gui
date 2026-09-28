@@ -48,7 +48,7 @@ export interface FilePreviewFile {
   contents: string;
 }
 
-type IframePreviewSandbox = "allow-scripts";
+type IframePreviewSandbox = "";
 
 interface IframeFilePreviewTarget {
   sandbox: IframePreviewSandbox;

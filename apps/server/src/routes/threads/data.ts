@@ -142,7 +142,10 @@ const RAW_FILE_NO_STORE_CACHE_CONTROL = "no-store";
 const RAW_FILE_HTML_CONTENT_TYPE = "text/html; charset=utf-8";
 const RAW_FILE_CONTENT_TYPE_OPTIONS = "nosniff";
 const HTML_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
-const GENERIC_HTML_PREVIEW_CSP = "sandbox allow-scripts";
+// ME-6: previews are untrusted documents — the sandbox directive denies
+// scripts, same-origin access, forms, and popups; the consuming iframes
+// carry the matching empty sandbox attribute.
+const GENERIC_HTML_PREVIEW_CSP = "sandbox";
 
 function parseThreadEventTypes(
   value: string | undefined,
@@ -574,7 +577,8 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
   get(routes.queuedMessages, (context) => {
     const threadId = context.req.param("id");
     const thread = requirePublicThread(deps.db, threadId);
-    if (isCloudThread(thread)) return context.json(cloudroom(deps).queue(threadId));
+    if (isCloudThread(thread))
+      return context.json(cloudroom(deps).queue(threadId));
     return context.json(
       listQueuedThreadMessages(deps.db, threadId).map(toThreadQueuedMessage),
     );

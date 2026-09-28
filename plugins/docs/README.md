@@ -53,9 +53,12 @@ provider, and directive are all Docs.
 - **Full HTML pages:** `.html` and `.htm` files appear in the vault tree and
   open as full-pane previews.
 - **Relative assets:** images and HTML use short-lived, path-shaped preview
-  leases. Relative styles, scripts, modules, images, and data files stay under
-  the selected vault root. HTML responses use `sandbox allow-scripts`, and the
-  iframe never receives `allow-same-origin`.
+  leases. Relative styles, images, and data files stay under the selected
+  vault root. HTML previews are inactive by default: responses carry a
+  `sandbox` CSP and the iframe carries a matching empty sandbox attribute, so
+  scripts never execute, forms cannot submit, and the frame has no
+  same-origin access to any origin. Markdown directive styles and images still
+  render; documents that need scripts must be opened externally.
 - **Chat mentions:** `@` searches every vault's titles, previews, filenames,
   and folders. A selected document resolves to its latest content at send time.
 - **Thread links:** agents can emit a Docs directive that renders as a document

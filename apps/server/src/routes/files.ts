@@ -29,6 +29,8 @@ import {
   requirePrimaryHostId,
 } from "../services/hosts/primary-host.js";
 import { requirePublicThreadEnvironment } from "../services/lib/entity-lookup.js";
+import { requireThreadStoragePath } from "../services/threads/thread-storage.js";
+import { containAbsolutePathWithinRoots } from "./host-path-containment.js";
 import {
   DEFAULT_PATH_LIST_EXCLUDE_NAMES,
   WORKSPACE_PATH_LIST_INCLUDE_HIDDEN,
@@ -38,7 +40,10 @@ const HOST_FILE_LIST_LIMIT_DEFAULT = 1000;
 
 const HTML_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
 const HTML_PREVIEW_CONTENT_TYPE = "text/html; charset=utf-8";
-const HTML_PREVIEW_CSP = "sandbox allow-scripts";
+// ME-6: previews are untrusted documents. The sandbox directive denies
+// scripts (no allow-scripts), same-origin access, forms, and popups; the
+// serving iframes carry the matching empty sandbox attribute.
+const HTML_PREVIEW_CSP = "sandbox";
 const NO_STORE_CACHE_CONTROL = "no-store";
 const NOSNIFF_CONTENT_TYPE_OPTIONS = "nosniff";
 const HTML_MIME_TYPE = "text/html";
@@ -140,11 +145,30 @@ async function serveRawFilesystemHtmlFile(
   const filePath = parseRawFilesystemPath(rawPath);
   assertHtmlPreviewPath(filePath);
   const { environment } = requirePublicThreadEnvironment(deps.db, threadId);
+  // HI-2 (SP-2): the requested absolute path is only ever read through one
+  // of the thread's registered roots. The server contains it lexically and
+  // passes that root as rootPath so the daemon enforces containment
+  // structurally (realpath on both sides, so symlinks cannot escape).
+  const roots: string[] = [];
+  if (environment.status === "ready" && environment.path) {
+    roots.push(environment.path);
+  }
+  roots.push(
+    await requireThreadStoragePath(deps, {
+      hostId: environment.hostId,
+      threadId,
+    }),
+  );
+  const contained = containAbsolutePathWithinRoots({
+    rawPath: filePath,
+    roots,
+  });
   return serveDaemonFileContent(
     deps,
     {
       hostId: environment.hostId,
-      path: filePath,
+      path: contained.path,
+      rootPath: contained.rootPath,
     },
     createRawFilesystemHtmlPreviewResponse,
   );

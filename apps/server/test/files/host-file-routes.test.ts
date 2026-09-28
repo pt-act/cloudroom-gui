@@ -157,9 +157,7 @@ describe("host file routes", () => {
       );
       expect(content.status).toBe(200);
       expect(content.headers.get("cache-control")).toBe("no-store");
-      expect(content.headers.get("content-security-policy")).toBe(
-        "sandbox allow-scripts",
-      );
+      expect(content.headers.get("content-security-policy")).toBe("sandbox");
       expect(content.headers.get("x-content-type-options")).toBe("nosniff");
       await expect(content.text()).resolves.toContain("<h1>Report</h1>");
       expect(commands).toEqual([

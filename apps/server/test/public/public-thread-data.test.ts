@@ -43,6 +43,7 @@ import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import type { TelemetryService } from "../../src/services/system/telemetry.js";
 import {
+  listQueuedCommands,
   reportNextEnvironmentAttachSuccess,
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
@@ -4526,7 +4527,7 @@ describe("public thread data routes", () => {
         "text/html; charset=utf-8",
       );
       expect(fileResponse.headers.get("content-security-policy")).toBe(
-        "sandbox allow-scripts",
+        "sandbox",
       );
       expect(fileResponse.headers.get("cache-control")).toBe("no-store");
       const body = await fileResponse.text();
@@ -4583,13 +4584,52 @@ describe("public thread data routes", () => {
         "text/html; charset=utf-8",
       );
       expect(fileResponse.headers.get("content-security-policy")).toBe(
-        "sandbox allow-scripts",
+        "sandbox",
       );
       expect(await fileResponse.text()).toBe(html);
     });
   });
 
-  it("serves absolute-path HTML files via files/raw with preview headers", async () => {
+  it("rejects out-of-root absolute HTML paths via files/raw without contacting the host", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-source",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/project-source",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      // HI-2 inversion (TG4): this test previously asserted that an
+      // arbitrary absolute path outside the thread was served. Registered
+      // roots are the worktree and the thread storage directory only.
+      const outOfRootPaths = [
+        "/tmp/anywhere/report.html",
+        "/tmp/project-source/../private-report.html",
+        "/tmp/project-source-sibling/report.html",
+        `/tmp/bb-host-data/${host.id}/thread-storage/other-thread/report.html`,
+      ];
+      for (const target of outOfRootPaths) {
+        const response = await harness.app.request(
+          `/api/v1/threads/${thread.id}/files/raw?path=${encodeURIComponent(target)}`,
+        );
+        expect(response.status, `expected rejection for ${target}`).toBe(400);
+        const body = await readJson(response);
+        expect(body).toMatchObject({ code: "invalid_path" });
+        expect(JSON.stringify(body)).not.toContain(target);
+      }
+      expect(listQueuedCommands(harness, "host.read_file")).toHaveLength(0);
+    });
+  });
+
+  it("serves in-root absolute HTML paths via files/raw with the worktree as rootPath", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
@@ -4606,22 +4646,24 @@ describe("public thread data routes", () => {
         environmentId: environment.id,
       });
       const html = "<!doctype html><h1>Raw preview</h1>";
+      const target = "/tmp/project-source/reports/../reports/report.html";
 
       const filePromise = harness.app.request(
-        `/api/v1/threads/${thread.id}/files/raw?path=${encodeURIComponent("/tmp/anywhere/report.html")}`,
+        `/api/v1/threads/${thread.id}/files/raw?path=${encodeURIComponent(target)}`,
       );
       const fileCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
           command.type === "host.read_file" &&
-          command.path === "/tmp/anywhere/report.html",
+          command.path === "/tmp/project-source/reports/report.html",
       );
       expect(fileCommand.command).toMatchObject({
         type: "host.read_file",
-        path: "/tmp/anywhere/report.html",
+        path: "/tmp/project-source/reports/report.html",
+        rootPath: "/tmp/project-source",
       });
       await reportQueuedCommandSuccess(harness, fileCommand, {
-        path: "/tmp/anywhere/report.html",
+        path: "/tmp/project-source/reports/report.html",
         content: html,
         contentEncoding: "utf8",
         mimeType: "text/html",
@@ -4635,11 +4677,63 @@ describe("public thread data routes", () => {
         "text/html; charset=utf-8",
       );
       expect(fileResponse.headers.get("content-security-policy")).toBe(
-        "sandbox allow-scripts",
+        "sandbox",
       );
       expect(fileResponse.headers.get("cache-control")).toBe("no-store");
       expect(fileResponse.headers.get("x-content-type-options")).toBe(
         "nosniff",
+      );
+      expect(await fileResponse.text()).toBe(html);
+    });
+  });
+
+  it("serves thread-storage absolute HTML paths via files/raw with storage as rootPath", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-source",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/project-source",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const threadStorageRoot = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
+      const html = "<!doctype html><h1>Storage preview</h1>";
+      const target = `${threadStorageRoot}/notes/report.html`;
+
+      const filePromise = harness.app.request(
+        `/api/v1/threads/${thread.id}/files/raw?path=${encodeURIComponent(target)}`,
+      );
+      const fileCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file" &&
+          command.path === `${threadStorageRoot}/notes/report.html`,
+      );
+      expect(fileCommand.command).toMatchObject({
+        type: "host.read_file",
+        path: `${threadStorageRoot}/notes/report.html`,
+        rootPath: threadStorageRoot,
+      });
+      await reportQueuedCommandSuccess(harness, fileCommand, {
+        path: `${threadStorageRoot}/notes/report.html`,
+        content: html,
+        contentEncoding: "utf8",
+        mimeType: "text/html",
+        sizeBytes: Buffer.byteLength(html),
+        sha256: "0".repeat(64),
+      });
+
+      const fileResponse = await filePromise;
+      expect(fileResponse.status).toBe(200);
+      expect(fileResponse.headers.get("content-security-policy")).toBe(
+        "sandbox",
       );
       expect(await fileResponse.text()).toBe(html);
     });

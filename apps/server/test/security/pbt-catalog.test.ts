@@ -7,6 +7,8 @@ import {
   nonLoopbackBindRefusal,
 } from "@bb/config/loopback";
 import { PUBLIC_API_CAPABILITY_FILE_NAME } from "../../src/services/public-api-capability.js";
+import { ApiError } from "../../src/errors.js";
+import { containAbsolutePathWithinRoots } from "../../src/routes/host-path-containment.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
 /**
@@ -119,10 +121,57 @@ describe("SP-1 credential extraction (TG1.9)", () => {
   });
 });
 
-describe.skip("SP-2 path containment (HI-2 — activates with TG4.7)", () => {
-  it.todo(
-    "resolve(root, target) stays within canonical(root) or the request is rejected (traversal, symlinks, separators, UNC)",
-  );
+describe("SP-2 path containment (HI-2; TG4.7)", () => {
+  it("resolves every absolute target inside a canonical registered root or rejects it", () => {
+    // Exhaustive 500-run property plus endpoint-level dispatch checks live
+    // in raw-file-containment.property.test.ts; this catalog entry keeps a
+    // compact property so the catalog itself reflects that SP-2 is active.
+    const roots = ["/tmp/worktree", "/tmp/storage"];
+    const target = fc.oneof(
+      fc
+        .tuple(
+          fc.constantFrom(...roots),
+          fc.stringMatching(/^[a-z0-9_-]{1,8}$/),
+        )
+        .map(([root, name]) => `${root}/${name}/report.html`),
+      fc
+        .tuple(
+          fc.constantFrom(...roots),
+          fc.stringMatching(/^[a-z0-9_-]{1,8}$/),
+        )
+        .map(([root, name]) => `${root}/../${name}.html`),
+      fc
+        .tuple(
+          fc.stringMatching(/^[a-z0-9_-]{1,8}$/),
+          fc.stringMatching(/^[a-z0-9_-]{1,8}$/),
+        )
+        .map(([a, b]) => `/etc/${a}/${b}.html`),
+      fc.constantFrom(
+        "C:\\Users\\x\\report.html",
+        "\\\\server\\share\\report.html",
+      ),
+    );
+    fc.assert(
+      fc.property(target, (rawTarget) => {
+        let admitted: { rootPath: string; path: string } | null = null;
+        try {
+          admitted = containAbsolutePathWithinRoots({
+            rawPath: rawTarget,
+            roots,
+          });
+        } catch (error) {
+          expect(error).toBeInstanceOf(ApiError);
+          expect((error as ApiError).status).toBe(400);
+        }
+        if (admitted !== null) {
+          expect(roots).toContain(admitted.rootPath);
+          expect(admitted.path.startsWith(`${admitted.rootPath}/`)).toBe(true);
+          expect(admitted.path).not.toContain("..");
+        }
+      }),
+      { numRuns: 100 },
+    );
+  });
 });
 
 describe.skip("SP-3 credential validation (ME-1, ME-5 — activates with TG5.6, TG6.5)", () => {
