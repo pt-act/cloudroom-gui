@@ -63,7 +63,6 @@ async function readPluginServerConfig(
 
 interface PluginServerBuildResult {
   jsPath: string;
-  mapPath: string;
   metaPath: string;
 }
 
@@ -77,7 +76,6 @@ export async function buildPluginServer(
   const distDir = join(rootDir, "dist");
   await mkdir(distDir, { recursive: true });
   const jsPath = join(distDir, "server.js");
-  const mapPath = join(distDir, "server.js.map");
   const metaPath = join(distDir, "server.meta.json");
 
   const stageDir = await mkdtemp(join(distDir, ".stage-"));
@@ -95,7 +93,10 @@ export async function buildPluginServer(
       format: "esm",
       platform: "node",
       target: "node22",
-      sourcemap: true,
+      // LO-1 (TG5.2): release artifacts ship no source maps — they disclose
+      // sourcesContent, source paths, and embedded literals. The bundles are
+      // unminified, so stack traces stay readable without them.
+      sourcemap: false,
       banner: { js: NODE_ESM_REQUIRE_BANNER },
       external: PLUGIN_SERVER_EXTERNALS.filter(
         (specifier) => !PLUGIN_SDK_ROOT_FILTER.test(specifier),
@@ -152,10 +153,9 @@ export async function buildPluginServer(
     );
 
     await rename(stagedJsPath, jsPath);
-    await rename(join(stageDir, "server.js.map"), mapPath);
     await rename(stagedMetaPath, metaPath);
   } finally {
     await rm(stageDir, { recursive: true, force: true });
   }
-  return { jsPath, mapPath, metaPath };
+  return { jsPath, metaPath };
 }

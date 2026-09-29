@@ -63,6 +63,6 @@ for (const plugin of selected) {
   if (app !== null) {
     outputs.push(app.jsPath, app.cssPath, app.metaPath);
   }
-  if (host !== null) outputs.push(host.jsPath, host.mapPath, host.metaPath);
+  if (host !== null) outputs.push(host.jsPath, host.metaPath);
   console.log(`${plugin}: built ${outputs.join(", ")}`);
 }

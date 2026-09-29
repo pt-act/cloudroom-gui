@@ -30,7 +30,8 @@ the current engine values and the entries for its generated surfaces.
 
 - `bb.server` (required) — backend entry. Path installs load it as
   TypeScript directly (no build step); `room plugin build` also emits a
-  `dist/server.js` + `server.js.map` + `server.meta.json`. The server bundle
+  `dist/server.js` + `server.meta.json` (no source maps — they disclose
+  sources and embedded literals). The server bundle
   externalizes the SDK and `better-sqlite3`; use `bb.storage.database()` for
   plugin-owned SQLite. `bb.app` (optional) — frontend entry compiled by
   `room plugin build` into minified `dist/app.js` + `app.css` + `app.meta.json`

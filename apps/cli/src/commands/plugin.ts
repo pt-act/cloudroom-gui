@@ -1474,7 +1474,7 @@ export function registerPluginCommands(
   plugin
     .command("build [path]")
     .description(
-      "Compile the plugin into dist/: the bb.server backend bundle (server.js, server.meta.json), plus, when declared, the bb.app frontend bundle (app.js, app.css, app.meta.json) and the self-contained bb.host daemon bundle (host.js, host.js.map, host.meta.json) — which carries the plugin's host RPC entry, its provider bridge, or both; each *.meta.json stamps SDK/identity metadata; no server required",
+      "Compile the plugin into dist/: the bb.server backend bundle (server.js, server.meta.json), plus, when declared, the bb.app frontend bundle (app.js, app.css, app.meta.json) and the self-contained bb.host daemon bundle (host.js, host.meta.json) — which carries the plugin's host RPC entry, its provider bridge, or both; each *.meta.json stamps SDK/identity metadata; no server required",
     )
     .action(
       action(async (path: string | undefined) => {
@@ -1488,14 +1488,14 @@ export function registerPluginCommands(
         }
         const toolchain = await cliBuildToolchain();
         const server = await buildPluginServer(rootDir, bbVersion, toolchain);
-        const files = [server.jsPath, server.mapPath, server.metaPath];
+        const files = [server.jsPath, server.metaPath];
         if (hasApp) {
           const app = await buildPluginApp(rootDir, bbVersion, toolchain);
           files.push(app.jsPath, app.cssPath, app.metaPath);
         }
         if (hasHost) {
           const host = await buildPluginHost(rootDir, bbVersion, toolchain);
-          files.push(host.jsPath, host.mapPath, host.metaPath);
+          files.push(host.jsPath, host.metaPath);
         }
         for (const file of files) {
           console.log(relative(process.cwd(), file));

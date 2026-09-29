@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -71,8 +71,14 @@ describe("buildPluginServer", () => {
     expect(js).not.toContain("@get-bb/plugin-sdk");
     expect(js).toContain("createRequire");
 
-    const map = await readFile(result.mapPath, "utf8");
-    expect(JSON.parse(map)).toMatchObject({ version: 3 });
+    // LO-1 (TG5.5): release artifacts ship no source maps — the dist
+    // directory must contain no .map files at all.
+    const distEntries = await readdir(join(root, "dist"));
+    expect(distEntries).toContain("server.js");
+    expect(
+      distEntries.filter((entry) => entry.endsWith(".map")),
+      "dist must not contain source map artifacts",
+    ).toEqual([]);
 
     const meta = JSON.parse(await readFile(result.metaPath, "utf8"));
     expect(meta).toEqual({

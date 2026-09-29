@@ -374,7 +374,7 @@ added/updated/unchanged counts.
                                  bb.app is declared, the minified frontend
                                  bundle (app.js, app.css, app.meta.json); when
                                  bb.host is declared, the self-contained Node
-                                 host bundle (host.js, host.js.map,
+                                 host bundle (host.js,
                                  host.meta.json recording its digest — host
                                  daemons fetch and verify the bundle by that
                                  digest, and run it as a host RPC worker, a

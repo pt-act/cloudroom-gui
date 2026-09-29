@@ -630,7 +630,8 @@ describe("bb-plugin-authoring skill", () => {
       /experimental_emitHostSignal\(\s*"host-test",\s*"changed",\s*\{\s*reason: "test",?\s*\}/,
     );
     expect(testing).not.toContain("resolveAgentConfiguration(context)");
-    expect(quickstart).toContain("server.js.map");
+    expect(quickstart).toContain("dist/server.js` + `server.meta.json");
+    expect(quickstart).not.toContain("server.js.map");
     expect(quickstart).toContain("--omit=dev --omit=optional");
     expect(distribution).not.toMatch(/"engines"\s*:/);
   });

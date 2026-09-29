@@ -376,7 +376,7 @@ describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
     expect(install).toHaveBeenCalledOnce();
   });
 
-  it("token auth: 401 without the token, works with header or query, rotate invalidates", async () => {
+  it("token auth: 401 without the token, header-only (query rejected), rotate invalidates", async () => {
     const unauthorized = await harness.app.request(
       `${BASE}/api/v1/plugins/wire/http/guarded`,
     );
@@ -407,10 +407,30 @@ describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
     expect(viaHeader.status).toBe(200);
     expect(await viaHeader.json()).toEqual({ guarded: true });
 
+    const viaBearer = await harness.app.request(
+      `${BASE}/api/v1/plugins/wire/http/guarded`,
+      {
+        headers: {
+          authorization: `Bearer ${token}`,
+          origin: EVIL_ORIGIN,
+        },
+      },
+    );
+    expect(viaBearer.status).toBe(200);
+    expect(await viaBearer.json()).toEqual({ guarded: true });
+
+    const viaWrongScheme = await harness.app.request(
+      `${BASE}/api/v1/plugins/wire/http/guarded`,
+      { headers: { authorization: `Basic ${token}` } },
+    );
+    expect(viaWrongScheme.status).toBe(401);
+
+    // ME-1 (TG5.1): the query channel is gone — even the CORRECT token in
+    // the URL must not authenticate (leaks via logs, history, referrers).
     const viaQuery = await harness.app.request(
       `${BASE}/api/v1/plugins/wire/http/guarded?token=${token}`,
     );
-    expect(viaQuery.status).toBe(200);
+    expect(viaQuery.status).toBe(401);
 
     const rotated = await harness.app.request(
       `${BASE}/api/v1/plugins/wire/token`,
@@ -936,12 +956,13 @@ describe("plugin WebSocket routes", () => {
     sockets.add(guarded);
     expect(String((await guardedConnection.firstMessage).data)).toBe("guarded");
 
-    const queryConnection = await openPluginWebSocketWithFirstMessage(
-      `${guardedUrl}?token=${encodeURIComponent(token ?? "")}`,
-    );
-    const { socket: queryAuthenticated } = queryConnection;
-    sockets.add(queryAuthenticated);
-    expect(String((await queryConnection.firstMessage).data)).toBe("guarded");
+    // ME-1 (TG5.1): query-string credentials are rejected on the WS upgrade
+    // path too — the token in the URL must not authenticate.
+    await expect(
+      rejectedPluginWebSocketStatus(
+        `${guardedUrl}?token=${encodeURIComponent(token ?? "")}`,
+      ),
+    ).resolves.toBe(401);
 
     const openConnection = await openPluginWebSocketWithFirstMessage(
       pluginWebSocketUrl(server.baseUrl, "/open-socket"),
@@ -1111,7 +1132,6 @@ describe("plugin wire authorization scoping (TG2.1)", () => {
             url: "http://127.0.0.1/x",
             method: "GET",
             header: () => undefined,
-            query: () => undefined,
           },
         },
         deps: { config: { serverPort: 1 } },

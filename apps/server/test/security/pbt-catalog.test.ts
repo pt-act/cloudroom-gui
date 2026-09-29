@@ -9,6 +9,7 @@ import {
 import { PUBLIC_API_CAPABILITY_FILE_NAME } from "../../src/services/public-api-capability.js";
 import { ApiError } from "../../src/errors.js";
 import { containAbsolutePathWithinRoots } from "../../src/routes/host-path-containment.js";
+import { pluginWireAuthProblem } from "../../src/routes/plugin-wire-auth.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
 /**
@@ -174,10 +175,65 @@ describe("SP-2 path containment (HI-2; TG4.7)", () => {
   });
 });
 
-describe.skip("SP-3 credential validation (ME-1, ME-5 — activates with TG5.6, TG6.5)", () => {
-  it.todo(
-    "query-string tokens are always rejected; openExternal is invoked iff scheme ∈ {http, https} and sender is trusted",
-  );
+describe("SP-3 credential placement (ME-1; TG5.6 — ME-5 half activates with TG6.5)", () => {
+  it("rejects query-string plugin credentials and honors header-only tokens", () => {
+    // Exhaustive 200-run property plus the real-route matrix live in
+    // plugin-credential-placement.property.test.ts and plugin-wire.test.ts;
+    // this catalog entry keeps a compact property so the catalog reflects
+    // that the ME-1 half of SP-3 is active.
+    const token = "catalog-wire-token-0123456789abcdef";
+    const deps = { config: { serverPort: 3000 } };
+    const plugins = { httpToken: async () => token };
+    const channel = fc.constantFrom<
+      "x-bb-plugin-token" | "authorization" | "query"
+    >("x-bb-plugin-token", "authorization", "query");
+    fc.assert(
+      fc.asyncProperty(
+        channel,
+        fc.boolean(),
+        fc.constantFrom("Bearer ", "bearer ", "Basic ", "Bearer"),
+        async (channel, correct, bearerPrefix) => {
+          const presented = correct ? token : "wrong-token-value";
+          const headers: Record<string, string> = {};
+          if (channel === "x-bb-plugin-token") {
+            headers["x-bb-plugin-token"] = presented;
+          }
+          if (channel === "authorization") {
+            headers.authorization = `${bearerPrefix}${presented}`;
+          }
+          const url = new URL("http://localhost:3000/api/v1/plugins/p/http/x");
+          if (channel === "query") {
+            url.searchParams.set("token", presented);
+          }
+          const problem = await pluginWireAuthProblem({
+            context: {
+              req: {
+                url: url.toString(),
+                method: "GET",
+                header: (name: string) => headers[name.toLowerCase()],
+              },
+            },
+            deps,
+            plugins,
+            pluginId: "p",
+            auth: "token",
+            capability: null,
+          });
+          const authenticates =
+            correct &&
+            (channel === "x-bb-plugin-token" ||
+              (channel === "authorization" &&
+                (bearerPrefix === "Bearer " || bearerPrefix === "bearer ")));
+          if (authenticates) {
+            expect(problem).toBeNull();
+          } else {
+            expect(problem).toMatchObject({ status: 401 });
+          }
+        },
+      ),
+      { numRuns: 60 },
+    );
+  });
 });
 
 describe.skip("SP-4 state integrity and idempotency (HI-3, ME-2, ME-3 — activates with TG8.8, TG9.7)", () => {

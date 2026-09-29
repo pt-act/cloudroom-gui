@@ -306,7 +306,6 @@ async function readPluginHostConfig(rootDir: string): Promise<{
 
 interface PluginHostBuildResult {
   jsPath: string;
-  mapPath: string;
   metaPath: string;
   artifactDigest: string;
 }
@@ -341,7 +340,6 @@ export async function buildPluginHost(
   const distDir = join(rootDir, "dist");
   await mkdir(distDir, { recursive: true });
   const jsPath = join(distDir, "host.js");
-  const mapPath = join(distDir, "host.js.map");
   const metaPath = join(distDir, "host.meta.json");
   await removeStaleHostStageDirectories(distDir);
   const stageDir = await mkdtemp(join(distDir, HOST_STAGE_DIRECTORY_PREFIX));
@@ -479,7 +477,10 @@ export async function buildPluginHost(
         },
       ],
       target: "node22",
-      sourcemap: true,
+      // LO-1 (TG5.2): release artifacts ship no source maps — they disclose
+      // sourcesContent, source paths, and embedded literals. The bundles are
+      // unminified, so stack traces stay readable without them.
+      sourcemap: false,
       banner: { js: NODE_ESM_REQUIRE_BANNER },
       logLevel: "error",
     });
@@ -502,9 +503,8 @@ export async function buildPluginHost(
       ) + "\n",
     );
     await rename(stagedJsPath, jsPath);
-    await rename(join(stageDir, "host.js.map"), mapPath);
     await rename(stagedMetaPath, metaPath);
-    return { jsPath, mapPath, metaPath, artifactDigest };
+    return { jsPath, metaPath, artifactDigest };
   } finally {
     await rm(stageDir, { recursive: true, force: true });
   }

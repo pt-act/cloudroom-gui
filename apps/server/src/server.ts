@@ -809,8 +809,14 @@ export function createApp(
       const terminalId = context.req.param("terminalId");
       // TG3 (HI-1): the upgrade requires the terminal's own short-lifetime
       // capability, issued at creation and re-issued on authenticated reads.
-      // Browser WebSocket clients cannot set headers, so the query parameter
-      // is the browser channel; the header serves non-browser clients.
+      // TG5: the query parameter is the ONLY credential that legitimately
+      // travels in a URL query string, and it is platform-forced — browser
+      // WebSocket clients cannot set headers on the handshake. Its short
+      // lifetime is the mitigation; the header serves non-browser clients.
+      // Redaction rule (request-url-redaction.ts): if any logger is ever
+      // added that records this request URL, it MUST redact the
+      // terminalToken parameter first — this URL is credential-bearing by
+      // design, and it is the reason that helper exists.
       deps.terminalSessions.requireTerminalCapability(
         terminalId,
         context.req.query("terminalToken") ??

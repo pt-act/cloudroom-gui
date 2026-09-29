@@ -297,8 +297,11 @@ Auth modes:
   frontend.
 - `"token"` — requires the per-plugin token (`room plugin token <id>`;
   `--rotate` generates a new one, invalidating the old) via the
-  `x-bb-plugin-token` header or `?token=`. Right for external scripts
-  and machines you control.
+  `x-bb-plugin-token` header or `Authorization: Bearer <token>`. Right for
+  external scripts and machines you control. Migration (TG5): the old
+  `?token=` query parameter is no longer accepted anywhere — query
+  credentials leak through access logs, browser history, and referrers; move
+  scripts to the header form.
 - `"none"` — no checks. ONLY for webhooks that verify their own signature
   (e.g. Slack's `x-slack-signature` HMAC) inside the handler.
 

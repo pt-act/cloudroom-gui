@@ -21,7 +21,6 @@ interface WireAuthContext {
     url: string;
     method: string;
     header: TokenReader;
-    query(name: string): string | undefined;
   };
 }
 
@@ -76,15 +75,32 @@ function timingSafeEqualStrings(a: string, b: string): boolean {
   return bufferA.length === bufferB.length && timingSafeEqual(bufferA, bufferB);
 }
 
+/**
+ * ME-1 (TG5.1): plugin credentials are header-only. The former `?token=`
+ * query channel was removed — query credentials leak through access logs,
+ * reverse proxies, browser history, monitoring, copied URLs, and referrer
+ * handling. `WireAuthContext` deliberately has no `query` accessor, so a
+ * future edit cannot reintroduce the channel without touching this guard.
+ * Malformed Authorization values fail closed (nothing presented).
+ */
+function presentedWireToken(header: TokenReader): string | undefined {
+  const dedicated = header("x-bb-plugin-token")?.trim();
+  if (dedicated !== undefined && dedicated.length > 0) {
+    return dedicated;
+  }
+  const authorization = header("authorization")?.trim();
+  if (authorization === undefined) {
+    return undefined;
+  }
+  return /^Bearer\s+(\S+)$/iu.exec(authorization)?.[1];
+}
+
 async function pluginTokenAuthProblem(
   context: WireAuthContext,
   plugins: PluginWireTokenSource,
   id: string,
 ): Promise<WireAuthProblem | null> {
-  // ME-1 (TG5.1) will remove the ?token= channel; until then it stays
-  // accepted here and nowhere else.
-  const presented =
-    context.req.header("x-bb-plugin-token") ?? context.req.query("token");
+  const presented = presentedWireToken((name) => context.req.header(name));
   const expected = await plugins.httpToken(id);
   if (
     expected === undefined ||
@@ -95,7 +111,7 @@ async function pluginTokenAuthProblem(
       status: 401,
       error:
         'missing or invalid plugin token — send it as the "x-bb-plugin-token" header ' +
-        "or ?token=; print it with `bb plugin token " +
+        '(or "Authorization: Bearer <token>"); print it with `bb plugin token ' +
         `${id}\``,
     };
   }

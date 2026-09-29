@@ -800,7 +800,9 @@ export interface PluginHttp {
    * - "local": Origin/Host must be a local BB app origin; non-GET requires
    *   content-type application/json (forces a CORS preflight).
    * - "token": requires the per-plugin token (`bb plugin token <id>`) via
-   *   the x-bb-plugin-token header or ?token=.
+   *   the x-bb-plugin-token header or "Authorization: Bearer <token>".
+   *   Query-string credentials are rejected (they leak through logs,
+   *   history, and referrers).
    * - "none": no checks — only for signature-verified webhooks.
    */
   route(
