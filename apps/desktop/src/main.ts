@@ -117,6 +117,11 @@ import {
   LINUX_TRANSPARENT_WINDOW_ARGUMENT,
 } from "./desktop-linux-window-options.js";
 import {
+  externalOpenIpcDecision,
+  externalUrlOpenDecision,
+  redactExternalUrlForLogging,
+} from "./external-open-policy.js";
+import {
   createDesktopAboutDialogOptions,
   createDesktopAboutPanelOptions,
   type DesktopAboutFacts,
@@ -543,6 +548,27 @@ const desktopLogger: DesktopAutoUpdateLogger = {
     process.stderr.write(`${message}\n`);
   },
 };
+
+/**
+ * ME-5 (TG6): the last call before `shell.openExternal` for every
+ * renderer-originated external open (window-open path and IPC path). It
+ * enforces the HTTP/HTTPS allowlist and opens the normalized URL, so the
+ * string handed to the OS is the exact string that was validated. Sender
+ * identity is NOT checked here — that is each caller's responsibility,
+ * and both current callers gate it (the IPC handler checks the
+ * application-window registry; the factory handler is reachable only from
+ * its own already policy-gated window-open).
+ */
+function openExternalUrlShellBoundary(rawUrl: string): void {
+  const decision = externalUrlOpenDecision(rawUrl);
+  if (decision.action === "deny") {
+    desktopLogger.warn(
+      `[desktop] external open denied (${decision.reason}): ${redactExternalUrlForLogging(rawUrl)}`,
+    );
+    return;
+  }
+  void shell.openExternal(decision.url);
+}
 
 function installLocalCapabilityHeaderInjection(): void {
   // The local server may require a per-install capability on /api/v1
@@ -1689,20 +1715,20 @@ function registerDesktopUpdateIpc(): void {
   });
   ipcMain.on(
     BB_DESKTOP_OPEN_EXTERNAL_URL_CHANNEL,
-    (_event, payload: unknown) => {
-      if (typeof payload !== "string") {
+    (event, payload: unknown) => {
+      // ME-5 (TG6): only registered application windows may ask the shell
+      // to open external URLs, and only http(s) URLs qualify. The final
+      // allowlist is restated in openExternalUrlShellBoundary below.
+      const decision = externalOpenIpcDecision({
+        payload,
+        senderIsApplicationWindow: applicationWindowWebContentsIds.has(
+          event.sender.id,
+        ),
+      });
+      if (decision.action === "deny") {
         return;
       }
-      let parsed: URL;
-      try {
-        parsed = new URL(payload);
-      } catch {
-        return;
-      }
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        return;
-      }
-      void shell.openExternal(parsed.toString());
+      openExternalUrlShellBoundary(decision.url);
     },
   );
 }
@@ -2428,7 +2454,7 @@ async function runDesktopApp(): Promise<void> {
       return quitting;
     },
     openExternalUrl(openArgs) {
-      void shell.openExternal(openArgs.url);
+      openExternalUrlShellBoundary(openArgs.url);
     },
     preloadPath,
     userDataPath,

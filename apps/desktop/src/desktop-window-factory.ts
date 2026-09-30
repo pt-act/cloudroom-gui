@@ -1,4 +1,5 @@
-import type { BrowserWindowConstructorOptions } from "electron";
+import type { BrowserWindowConstructorOptions, HandlerDetails } from "electron";
+import { externalUrlOpenDecision } from "./external-open-policy.js";
 import {
   MIN_WINDOW_HEIGHT,
   MIN_WINDOW_WIDTH,
@@ -25,17 +26,18 @@ const MACOS_TRAFFIC_LIGHT_POSITION = {
   y: MACOS_TRAFFIC_LIGHT_DIAGONAL_INSET,
 };
 
-interface DesktopWindowOpenDetails {
-  url: string;
-}
+// Electron's real window-open details (url, frameName, features,
+// disposition, referrer, postBody). Deliberately NOT re-declared: typing
+// the handler against Electron's own interface means a fictional field —
+// like the userGesture this boundary once gated on — cannot be invented
+// here or in tests without a compile error.
+export type DesktopWindowOpenHandler = (
+  details: HandlerDetails,
+) => DesktopWindowOpenHandlerResult;
 
 interface DesktopWindowOpenHandlerResult {
   action: "deny";
 }
-
-export type DesktopWindowOpenHandler = (
-  details: DesktopWindowOpenDetails,
-) => DesktopWindowOpenHandlerResult;
 
 export interface DesktopWindowOpenDevToolsOptions {
   mode: "detach";
@@ -260,6 +262,16 @@ export function createDesktopWindowFactory(
         }
       });
       browserWindow.webContents.setWindowOpenHandler((details) => {
+        // ME-5 (TG6): the window-open path forwards to the OS opener only
+        // http(s) URLs. Electron's HandlerDetails carries no gesture signal
+        // (url, frameName, features, disposition, referrer, postBody — that
+        // is all), so user intent is enforced where it is observable: the
+        // renderer's own click handlers and the sender-gated IPC path. The
+        // decision is restated at the shell boundary in main.ts.
+        const decision = externalUrlOpenDecision(details.url);
+        if (decision.action === "deny") {
+          return { action: "deny" };
+        }
         args.openExternalUrl({ url: details.url });
         return { action: "deny" };
       });

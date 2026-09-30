@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrowserWindowConstructorOptions } from "electron";
+import fc from "fast-check";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createDesktopWindowFactory,
@@ -407,7 +408,13 @@ describe("desktop window factory", () => {
       throw new Error("Expected window open handler");
     }
 
-    const result = handler({ url: "https://example.com/from-markdown" });
+    const result = handler({
+      url: "https://example.com/from-markdown",
+      frameName: "",
+      features: "",
+      disposition: "foreground-tab",
+      referrer: { policy: "strict-origin-when-cross-origin", url: "" },
+    });
 
     expect(createdWindows).toHaveLength(1);
     expect(openedExternalUrls).toEqual(["https://example.com/from-markdown"]);
@@ -534,6 +541,135 @@ describe("desktop window factory", () => {
     expect(createdWindows[0]?.options).not.toHaveProperty("titleBarStyle");
     expect(createdWindows[0]?.options).not.toHaveProperty(
       "trafficLightPosition",
+    );
+  });
+});
+
+/**
+ * SP-3 openExternal half (ME-5 / TG6): a window-open URL reaches the OS
+ * opener if and only if it parses to http/https. The predicate below
+ * states the security rule independently of the implementation; the
+ * implementation (the external-open policy) must satisfy it for every
+ * generated URL. Details are built in Electron's real HandlerDetails
+ * shape — the API exposes no gesture signal (verdict-TG6 blocker), so
+ * user intent is enforced in the renderer's click handlers and the
+ * sender-gated IPC path, not here.
+ */
+const externalOpenAllowedByPolicy = (url: string): boolean => {
+  if (url.length === 0 || /[\u0000-\u001f]/u.test(url)) {
+    return false;
+  }
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+function fakeOpenDetails(url: string): Parameters<DesktopWindowOpenHandler>[0] {
+  return {
+    url,
+    frameName: "",
+    features: "",
+    disposition: "foreground-tab",
+    referrer: { policy: "strict-origin-when-cross-origin", url: "" },
+  };
+}
+
+const windowOpenUrlArb = fc.oneof(
+  fc
+    .tuple(
+      fc.constantFrom("https", "http"),
+      fc.webSegment(),
+      fc.stringMatching(/^[a-z]{0,6}$/),
+    )
+    .map(([scheme, host, path]) => `${scheme}://${host}/${path}?q=preview-v1`),
+  fc
+    .tuple(fc.constantFrom("HTTPS", "Http"), fc.webSegment())
+    .map(([scheme, host]) => `${scheme}://${host}/uppercase-scheme`),
+  fc.constantFrom(
+    "file:///etc/passwd",
+    "javascript:alert(1)",
+    "data:text/html,<h1>preview</h1>",
+    "vscode://file/tmp/report",
+    "slack://channel/team",
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+    "chrome://settings",
+    "about:blank",
+    "ftp://host/file",
+    "mailto:someone@example.test",
+  ),
+  fc.constantFrom("", "not a url", "//host/path", "http:", "https:/", "   "),
+  fc.constantFrom(
+    "http://example.com/\u0000escape",
+    "https://ex\nample.com/path",
+    "javascript:alert(1)\n//still-script",
+  ),
+);
+
+describe("external open boundary (ME-5 / SP-3 openExternal half, TG6)", () => {
+  it("opens a window-open URL only when it is http(s)", async () => {
+    const tempDir = await createTempDir();
+    const openedExternalUrls: string[] = [];
+    const createdWindows: FakeDesktopWindow[] = [];
+    const factory = createDesktopWindowFactory({
+      browserWindowCreator: {
+        create(options) {
+          const browserWindow = new FakeDesktopWindow({ options });
+          createdWindows.push(browserWindow);
+          return browserWindow;
+        },
+      },
+      createWindowStateKey() {
+        return "boundary-window";
+      },
+      displayWorkAreas: [
+        {
+          height: 900,
+          width: 1440,
+          x: 0,
+          y: 0,
+        },
+      ],
+      icon: undefined,
+      isMac: true,
+      isLinuxTransparent: false,
+      isLinuxFrameless: false,
+      isQuitting() {
+        return false;
+      },
+      openExternalUrl({ url }) {
+        openedExternalUrls.push(url);
+      },
+      preloadPath: "/tmp/preload.cjs",
+      userDataPath: tempDir.path,
+    });
+
+    await factory.createWindow({
+      initialUrl: "http://127.0.0.1:38886",
+      stateKey: null,
+    });
+    const browserWindow = createdWindows[0];
+    if (!browserWindow) {
+      throw new Error("Expected desktop window");
+    }
+    const handler = browserWindow.webContents.windowOpenHandler;
+    if (!handler) {
+      throw new Error("Expected window open handler");
+    }
+
+    await fc.assert(
+      fc.asyncProperty(windowOpenUrlArb, async (url) => {
+        const openedBefore = openedExternalUrls.length;
+        const result = handler(fakeOpenDetails(url));
+        const invoked = openedExternalUrls.length > openedBefore;
+        expect(result).toEqual({ action: "deny" });
+        expect(invoked, `url: ${JSON.stringify(url)}`).toBe(
+          externalOpenAllowedByPolicy(url),
+        );
+      }),
+      { numRuns: 150 },
     );
   });
 });
