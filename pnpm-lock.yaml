@@ -351,6 +351,9 @@ importers:
       cacache:
         specifier: ^20.0.4
         version: 20.0.4
+      fast-check:
+        specifier: 4.10.2
+        version: 4.10.2
       lightningcss:
         specifier: ^1.32.0
         version: 1.32.0
@@ -20465,7 +20468,9 @@ snapshots:
       metro-runtime: 0.84.5
     transitivePeerDependencies:
       - '@babel/core'
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-colors@0.79.6': {}
 

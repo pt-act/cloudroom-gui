@@ -447,6 +447,36 @@ describe("MarkdownPreview", () => {
     expect(resolveSrc).toHaveBeenCalledTimes(2);
   });
 
+  it("renders remote markdown images with a no-referrer policy (LO-2)", () => {
+    const { container } = render(
+      <MarkdownPreview
+        content={[
+          "![remote](https://example.com/unique-tracking-pixel.png)",
+          "![local](/workspace/generated.png)",
+          '<img src="https://example.com/raw-html-pixel.png" alt="raw" />',
+        ].join("\n\n")}
+        allowHtml
+        linkRouting={{
+          localImage: {
+            absolutePaths: { kind: "trusted-host" },
+            relativePaths: {
+              baseDir: "/workspace",
+              rootPath: "/workspace",
+            },
+            resolveSrc: ({ path }) =>
+              `/api/files/content?path=${encodeURIComponent(path)}`,
+          },
+        }}
+      />,
+    );
+
+    for (const alt of ["remote", "local", "raw"]) {
+      const image = container.querySelector(`img[alt="${alt}"]`);
+      expect(image, `expected an img for ${alt}`).not.toBeNull();
+      expect(image?.getAttribute("referrerpolicy")).toBe("no-referrer");
+    }
+  });
+
   it("keeps absolute app-origin URLs on the app-route path", () => {
     const onOpenLink = vi.fn(() => true);
     const href = `${window.location.origin}/threads/thr_localhost`;

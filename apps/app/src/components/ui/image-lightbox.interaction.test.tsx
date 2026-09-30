@@ -66,3 +66,10 @@ it("keeps navigation open and restores the trigger after keyboard dismissal", ()
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(document.activeElement).toBe(trigger);
 });
+
+it("loads lightbox images with a no-referrer policy (LO-2)", () => {
+  render(<Preview />);
+  fireEvent.click(screen.getByRole("button", { name: "Open image" }));
+  const image = screen.getByRole("img", { name: "Image 0" });
+  expect(image.getAttribute("referrerpolicy")).toBe("no-referrer");
+});
