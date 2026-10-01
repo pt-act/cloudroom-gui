@@ -164,6 +164,7 @@ import type {
   PromptHistoryQuery,
   PromptHistoryResponse,
   ReorderPinnedThreadRequest,
+  UnpinAndMoveThreadRequest,
   ReorderProjectRequest,
   ReorderQueuedMessageRequest,
   ResolvePendingInteractionRequest,
@@ -328,6 +329,7 @@ import {
   updateSkillRequestSchema,
   promptHistoryQuerySchema,
   reorderPinnedThreadRequestSchema,
+  unpinAndMoveThreadRequestSchema,
   reorderProjectRequestSchema,
   reorderQueuedMessageRequestSchema,
   resolvePendingInteractionRequestSchema,
@@ -1396,6 +1398,14 @@ export const publicApiRoutes = {
       path: "/threads/:id/unpin",
       method: "post",
       request: noRequest<PathId>(),
+      response: jsonResponse<ThreadResponse>(),
+    }),
+    unpinAndMove: defineRoute({
+      path: "/threads/:id/unpin-and-move",
+      method: "post",
+      request: jsonRequest<PathId, UnpinAndMoveThreadRequest>(
+        unpinAndMoveThreadRequestSchema,
+      ),
       response: jsonResponse<ThreadResponse>(),
     }),
     pinOrder: defineRoute({
