@@ -165,6 +165,7 @@ import type {
   PromptHistoryResponse,
   ReorderPinnedThreadRequest,
   UnpinAndMoveThreadRequest,
+  ThreadUnarchiveResponse,
   ReorderProjectRequest,
   ReorderQueuedMessageRequest,
   ResolvePendingInteractionRequest,
@@ -1462,7 +1463,7 @@ export const publicApiRoutes = {
       path: "/threads/:id/unarchive",
       method: "post",
       request: noRequest<PathId>(),
-      response: jsonResponse<{ ok: true }>(),
+      response: jsonResponse<ThreadUnarchiveResponse>(),
     }),
     read: defineRoute({
       path: "/threads/:id/read",
