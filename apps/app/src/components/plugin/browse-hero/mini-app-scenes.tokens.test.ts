@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -85,8 +86,6 @@ describe("MiniAppScenes token usage (IN-1, TG11.8)", () => {
         oklchAchromaticLuminance(ink),
         oklchAchromaticLuminance(canvas),
       );
-      // The token pair itself must clear AA (4.5:1) comfortably for the
-      // mixed normal-size labels to stay readable.
       expect(
         contrast,
         `${selector} ink/canvas contrast`,

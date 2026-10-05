@@ -31,9 +31,6 @@ export function appSurfaceRequestInit(init?: RequestInit): RequestInit {
   };
 }
 
-// TG3 (HI-1): terminal mutations and output reads require the terminal's own
-// short-lifetime capability (issued at creation, re-issued on authenticated
-// GET). Inject it from the in-memory store when the URL addresses a terminal.
 const TERMINAL_URL_PATTERN = /\/api\/v1\/terminals\/([^/?]+)/u;
 
 function terminalCapabilityFor(
@@ -94,7 +91,6 @@ export function fetchWithAppSurface(
   if (terminalId === undefined) {
     return first;
   }
-  // Expired capability: re-issue via the authenticated GET and retry once.
   return first.then(async (response) => {
     if (response.status !== 401) {
       return response;
