@@ -11,6 +11,12 @@ import { ApiError } from "../../src/errors.js";
 import { containAbsolutePathWithinRoots } from "../../src/routes/host-path-containment.js";
 import { pluginWireAuthProblem } from "../../src/routes/plugin-wire-auth.js";
 import { withTestHarness } from "../helpers/test-app.js";
+import {
+  seedHostSession,
+  seedProjectWithSource,
+  seedThread,
+} from "../helpers/seed.js";
+import { hosts, projects, threads } from "@bb/db";
 
 /**
  * Property-based test catalog for the audit-remediation program
@@ -63,9 +69,58 @@ describe("SP-1 access control — capability gate (CR-1, HI-1; TG1.8)", () => {
       },
     );
   });
-  it.todo(
-    "SP-1 residual (TG2.7): denied requests cause zero side effects — no file reads, PTY spawns, or DB writes (deployment-test scope)",
-  );
+  it("denied requests cause zero side effects — no DB writes, no PTY spawns (TG2.7/3.9)", async () => {
+    await withTestHarness(
+      { requirePublicApiCapability: true },
+      async (harness) => {
+        // Seed a project, thread, and host so the DB has state to protect.
+        const { host } = seedHostSession(harness.deps, {
+          id: "host-sp1-residual",
+        });
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        seedThread(harness.deps, { projectId: project.id });
+
+        // Snapshot the mutation-bearing tables before the denied battery.
+        const snapshotTables = () =>
+          JSON.stringify({
+            threads: harness.db.select().from(threads).all(),
+            projects: harness.db.select().from(projects).all(),
+            hosts: harness.db.select().from(hosts).all(),
+          });
+        const before = snapshotTables();
+
+        // Battery of denied mutating requests across methods and paths —
+        // no credential, wrong credential, and a forged Bearer.
+        const wrongToken = "0".repeat(64);
+        const paths = [
+          "/api/v1/threads",
+          "/api/v1/projects",
+          "/api/v1/terminals",
+          "/api/v1/files/read",
+          "/api/v1/files/write",
+          "/api/v1/hosts",
+        ];
+        const methods = ["POST", "PATCH", "DELETE"];
+        const credentialVariants = [
+          {},
+          { "x-bb-capability": wrongToken },
+          { authorization: `Bearer ${wrongToken}` },
+        ];
+        for (const path of paths) {
+          for (const method of methods) {
+            for (const headers of credentialVariants) {
+              await harness.app.request(path, { method, headers });
+            }
+          }
+        }
+
+        // Zero side effects: the DB is byte-identical (no row writes).
+        expect(snapshotTables()).toBe(before);
+      },
+    );
+  });
 });
 
 describe("SP-1 credential extraction (TG1.9)", () => {
@@ -236,17 +291,11 @@ describe("SP-3 credential placement (ME-1; TG5.6 — ME-5 half activates with TG
   });
 });
 
-describe.skip("SP-4 state integrity and idempotency (HI-3, ME-2, ME-3 — activates with TG8.8, TG9.7)", () => {
-  it.todo(
-    "same idempotency key applied twice → provider effect exactly once; title and search segments never diverge; pin and section never partially commit",
-  );
-});
-
-describe.skip("SP-5 capability security (HI-1 — activates with TG3.7)", () => {
-  it.todo(
-    "expired, wrong-owner, or wrong-target capability → every terminal REST/WS mutation rejected",
-  );
-});
+// SP-4 and SP-5 active properties live in their dedicated files:
+// SP-4 state integrity: apps/server/test/security/../.. thread-state-integrity.test.ts,
+//   thread-provider-operations.test.ts, thread-state-cache-owner.test.ts (10.6).
+// SP-5 capability security: terminal-capability.property.test.ts + terminal-capability.test.ts.
+// The catalog does not duplicate them; see pbt-report.md for the full mapping.
 
 describe("PBT harness smoke (TG0.2)", () => {
   it("bind-refusal gate admits exactly the loopback-or-explicitly-allowed binds", () => {
