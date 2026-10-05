@@ -69,7 +69,13 @@ describe("SP-1 access control — capability gate (CR-1, HI-1; TG1.8)", () => {
       },
     );
   });
-  it("denied requests cause zero side effects — no DB writes, no PTY spawns (TG2.7/3.9)", async () => {
+  // Authentication-boundary coverage. Every member of this battery is
+  // refused at the root capability gate before any route handler runs, so
+  // "zero DB writes" holds here by construction — it guards the gate, not
+  // the authorization layer. The audit's A3 requirement (a request that IS
+  // authenticated yet is denied by per-resource authorization performs no
+  // mutation) is asserted in terminal-capability.test.ts, SP-1 / A3 case.
+  it("requests refused at the capability gate cause zero DB writes (authentication boundary; TG2.7/3.9)", async () => {
     await withTestHarness(
       { requirePublicApiCapability: true },
       async (harness) => {
@@ -103,7 +109,7 @@ describe("SP-1 access control — capability gate (CR-1, HI-1; TG1.8)", () => {
           "/api/v1/hosts",
         ];
         const methods = ["POST", "PATCH", "DELETE"];
-        const credentialVariants = [
+        const credentialVariants: Record<string, string>[] = [
           {},
           { "x-bb-capability": wrongToken },
           { authorization: `Bearer ${wrongToken}` },

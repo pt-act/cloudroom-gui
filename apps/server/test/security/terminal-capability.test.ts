@@ -1,14 +1,20 @@
 import http from "node:http";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import fc from "fast-check";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HostDaemonServerWsMessage } from "@bb/host-daemon-contract";
 import type {
   TerminalSessionWithCapability,
   TerminalCapability,
 } from "@bb/server-contract";
+import { terminalSessions } from "@bb/db";
 import {
   createTestAppHarness,
   type TestAppHarness,
+  type TestAppHarnessConfigOverrides,
 } from "../helpers/test-app.js";
+import { PUBLIC_API_CAPABILITY_FILE_NAME } from "../../src/services/public-api-capability.js";
 import {
   seedEnvironment,
   seedHostSession,
@@ -51,8 +57,10 @@ function createFakeDaemonSocket(
   };
 }
 
-async function createTerminalFixture(): Promise<TerminalFixture> {
-  const harness = await createTestAppHarness();
+async function createTerminalFixture(
+  overrides: TestAppHarnessConfigOverrides = {},
+): Promise<TerminalFixture> {
+  const harness = await createTestAppHarness(overrides);
   const seeded = seedHostSession(harness.deps, { id: "terminal-host" });
   const { project } = seedProjectWithSource(harness.deps, {
     hostId: seeded.host.id,
@@ -114,11 +122,17 @@ async function waitForTerminalOpen(
 
 async function createStandaloneTerminal(
   fixture: TerminalFixture,
+  options: { installCapability?: string } = {},
 ): Promise<TerminalSessionWithCapability> {
   const pending = Promise.resolve(
     fixture.harness.app.request("/api/v1/terminals", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(options.installCapability === undefined
+          ? {}
+          : { "x-bb-capability": options.installCapability }),
+      },
       body: JSON.stringify({
         cols: 100,
         rows: 30,
@@ -234,6 +248,97 @@ describe("terminal capability enforcement (TG3)", () => {
       "x-bb-terminal-capability": first.capability.token,
     });
     expect(own).toBe(200);
+  });
+
+  it("an authenticated request denied by per-resource authorization performs no side effect (SP-1 / A3; TG2.7)", async () => {
+    // The catalog's SP-1 gate battery can only ever exercise the
+    // authentication boundary: every member of it dies at the root capability
+    // gate before any handler runs, so "no DB writes" holds there by
+    // construction. This covers the quadrant the audit's A3 actually names —
+    // a request that IS authenticated (valid install capability, root gate
+    // passed, handler entered) yet is denied by per-resource authorization
+    // (a terminal capability issued for a different terminal).
+    fixture = await createTerminalFixture({
+      requirePublicApiCapability: true,
+    });
+    const installToken = (
+      await readFile(
+        join(fixture.harness.config.dataDir, PUBLIC_API_CAPABILITY_FILE_NAME),
+        "utf8",
+      )
+    ).trim();
+
+    const pool: TerminalSessionWithCapability[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      pool.push(
+        await createStandaloneTerminal(fixture, {
+          installCapability: installToken,
+        }),
+      );
+    }
+
+    // Local captures keep the non-null narrowing across the closures below
+    // (fixture is a let that later tests may reassign).
+    const harness = fixture.harness;
+    const socket = fixture.socket;
+
+    // Proves the handler was entered: a root-gate rejection, a 404, or a
+    // never-routed request cannot satisfy it, so the zero-side-effect
+    // assertions below cannot pass vacuously.
+    const requireSpy = vi.spyOn(
+      harness.deps.terminalSessions,
+      "requireTerminalCapability",
+    );
+
+    const snapshot = () =>
+      JSON.stringify(harness.db.select().from(terminalSessions).all());
+    const before = snapshot();
+
+    await fc.assert(
+      fc.asyncProperty(
+        fc.integer({ min: 0, max: pool.length - 1 }),
+        fc.integer({ min: 0, max: pool.length - 1 }),
+        async (targetIndex, foreignIndex) => {
+          fc.pre(targetIndex !== foreignIndex);
+          const target = pool[targetIndex];
+          const foreign = pool[foreignIndex];
+
+          const denied = await harness.app.request(
+            `/api/v1/terminals/${target.id}/input`,
+            {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-bb-capability": installToken,
+                "x-bb-terminal-capability": foreign.capability.token,
+              },
+              body: JSON.stringify({
+                dataBase64: Buffer.from("echo hi\n").toString("base64"),
+              }),
+            },
+          );
+          expect(denied.status).toBe(401);
+          // The handler ran and reached the per-resource check for this exact
+          // terminal with this exact presented credential.
+          expect(requireSpy.mock.calls.at(-1)).toEqual([
+            target.id,
+            foreign.capability.token,
+          ]);
+        },
+      ),
+      { numRuns: 12 },
+    );
+
+    // Zero DB writes across the whole denied battery...
+    expect(snapshot()).toBe(before);
+    // ...and zero PTY effects: the daemon never received any input.
+    expect(
+      socket.sentMessages.filter(
+        (raw) =>
+          (JSON.parse(raw) as HostDaemonServerWsMessage).type ===
+          "terminal.input",
+      ),
+    ).toHaveLength(0);
   });
 
   it("re-issues the same token on authenticated reads", async () => {
