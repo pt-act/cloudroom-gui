@@ -200,8 +200,6 @@ export function ImageLightbox({
         <img
           src={imageSrc}
           alt={imageAlt}
-          // LO-2 (TG7): the lightbox re-fetches markdown-sourced remote
-          // URLs; those requests must not send referrer data either.
           referrerPolicy="no-referrer"
           style={IMAGE_TRANSPARENCY_CHECKER_STYLE}
           className="max-h-[82dvh] max-w-full object-contain"

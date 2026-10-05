@@ -1155,8 +1155,6 @@ function SidebarNavRowChrome({
   rowStyle,
 }: SidebarNavRowChromeProps) {
   const [isActionsOpen, setIsActionsOpen] = useState(false);
-  // ME-7 (TG11.1): the keyboard drag activator is preserved — dnd-kit's
-  // KeyboardSensor picks the row up with Space/Enter on this handle.
   const menuItems = (surface: PluginNavRowMenuSurface): ReactNode => (
     <PluginNavRowMenuItems
       surface={surface}

@@ -44,11 +44,9 @@ describe("notification center accessibility (ME-9, LO-3, TG11.3/11.11)", () => {
       fireEvent.click(trigger);
     });
 
-    // The popover is open (aria-expanded) and its content is present.
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getAllByRole("dialog").length).toBeGreaterThan(0);
 
-    // Close via the header control: focus returns to the invoker.
     fireEvent.click(
       screen.getAllByRole("button", { name: /Hide notifications/ })[0],
     );
@@ -72,8 +70,6 @@ describe("notification center accessibility (ME-9, LO-3, TG11.3/11.11)", () => {
       fireEvent.click(screen.getAllByTestId("notification-center-trigger")[0]);
     });
 
-    // The app renders desktop and mobile instances; clicking any copy
-    // control flips its own label to Copied with a polite announcement.
     const copyButtons = screen.getAllByRole("button", {
       name: "Copy notification",
     });

@@ -949,9 +949,6 @@ function MarkdownRenderedImage({
       {...imageAttributes}
       src={imageUrl}
       alt={typeof alt === "string" ? alt : "Image"}
-      // LO-2 (TG7): remote markdown servers must not learn the viewer's
-      // origin or context from referrer headers. Declared after the spread
-      // so upstream image attributes cannot override it.
       referrerPolicy="no-referrer"
       className="my-2 max-h-[max(384px,50vh)] max-w-full cursor-zoom-in object-contain"
       loading="lazy"

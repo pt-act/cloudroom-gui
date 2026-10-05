@@ -200,9 +200,6 @@ export function useUnpinAndMoveThread() {
       errorMessage: "Failed to unpin and move thread.",
     },
     mutationFn: async ({ sectionId, id }) => {
-      // HI-3 (TG8): one atomic server mutation replaces the unpin -> update
-      // pair whose partial failure left the backend unpinned in the
-      // original section while the client rolled back to "pinned".
       return sdk.threads.unpinAndMove({ sectionId, threadId: id });
     },
     onMutate: async ({ sectionId, id }) =>
@@ -320,9 +317,6 @@ export function useUnarchiveThread() {
       errorMessage: "Failed to unarchive thread.",
     },
     mutationFn: async ({ id }: ThreadMutationRequest) => {
-      // ME-3 (TG9): the response carries the truthful provider-restore
-      // status; the DB unarchive is committed, but a failed or pending
-      // provider restore is surfaced (9.3) instead of silently swallowed.
       return sdk.threads.unarchive({ threadId: id });
     },
     onMutate: async ({ id }): Promise<ThreadListMutationTransaction> =>

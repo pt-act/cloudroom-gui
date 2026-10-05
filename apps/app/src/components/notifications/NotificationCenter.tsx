@@ -171,8 +171,6 @@ export function NotificationCenter() {
     appToast.dismiss();
   }, [open]);
 
-  // ME-9 (TG11.3): when the popover closes, return focus to the persistent
-  // invoker so keyboard users are not stranded.
   const wasOpen = useRef(false);
   useEffect(() => {
     if (wasOpen.current && !open) {

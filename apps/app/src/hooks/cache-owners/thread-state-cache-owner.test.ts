@@ -147,10 +147,6 @@ describe("thread state cache owner", () => {
       ];
       for (const cached of cachedChild())
         expect(cached).toMatchObject(expected);
-      // ME-4 (TG10): the rollback invalidates for a refetch instead of
-      // restoring snapshots — the optimistic values stay visible (no flash
-      // of the old section) until the modeled refetch converges to server
-      // truth.
       rollbackThreadListMutationTransaction({
         queryClient,
         threadId: child.id,
@@ -218,9 +214,6 @@ describe("thread state cache owner", () => {
       )?.projects[0]?.threads[0]?.title,
     ).toBe("New title");
 
-    // ME-4 (TG10): the rollback invalidates for a refetch — the optimistic
-    // value stays visible until the refetch lands, then converges to the
-    // server truth.
     rollbackThreadListMutationTransaction({
       queryClient,
       threadId,
@@ -287,9 +280,6 @@ describe("thread state cache owner", () => {
       )?.projects[0]?.threads[0]?.lastReadAt,
     ).toBe(50);
 
-    // ME-4 (TG10): the rollback invalidates for a refetch — the optimistic
-    // value stays visible until the modeled refetch converges to the
-    // server truth.
     rollbackThreadListMutationTransaction({
       queryClient,
       threadId,

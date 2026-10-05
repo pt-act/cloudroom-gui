@@ -121,8 +121,6 @@ describe("thread state mutations", () => {
       route === "update" ? 1 : 0,
     );
     expect(sdk.threads.unpin).toHaveBeenCalledTimes(route === "unpin" ? 1 : 0);
-    // HI-3 (TG8): a pinned thread moving to another section takes the one
-    // atomic mutation, not an unpin -> update pair.
     expect(sdk.threads.unpinAndMove).toHaveBeenCalledTimes(
       route === "atomic" ? 1 : 0,
     );
@@ -156,13 +154,9 @@ describe("thread state mutations", () => {
     });
 
     await waitFor(() => expect(queryClient.isMutating()).toBe(0));
-    // ME-4 (TG10): the failed mutation invalidates for a refetch instead
-    // of restoring snapshots.
     expect(queryClient.getQueryState(threadListKey)?.isInvalidated).toBe(
       true,
     );
-    // Model the refetch landing: server truth is the original pinned
-    // state (the atomic mutation committed nothing).
     queryClient.setQueryData(threadListKey, [thread]);
     const entries = queryClient.getQueryData<ThreadListEntry[]>(threadListKey);
     expect(entries?.[0]?.pinnedAt).toBe(10);
@@ -189,8 +183,6 @@ describe("thread state mutations", () => {
 
     await waitFor(() => expect(queryClient.isMutating()).toBe(0));
     expect(sdk.threads.unpinAndMove).toHaveBeenCalledTimes(2);
-    // The second application is idempotent: the same target section, the
-    // same unpinned end state.
     const entries = queryClient.getQueryData<ThreadListEntry[]>(threadListKey);
     const moved = entries?.find((entry) => entry.id === thread.id);
     expect(moved?.pinnedAt ?? null).toBeNull();
@@ -393,9 +385,6 @@ describe("thread state mutations", () => {
       sectionId: destinationSectionId,
       pinnedAt: null,
     });
-    // HI-3 (TG8): a single atomic call replaces the serialized unpin ->
-    // update pair, so there is no window in which the backend is unpinned
-    // but not yet moved.
     expect(sdk.threads.unpinAndMove).toHaveBeenCalledWith({
       threadId,
       sectionId: destinationSectionId,

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+
 import { cleanup, render } from "@testing-library/react";
 import fc from "fast-check";
 import { afterEach, describe, expect, it } from "vitest";
@@ -41,9 +42,6 @@ describe("markdown image privacy (LO-2 / TG7.4)", () => {
   it("emits no-referrer on every rendered remote image", () => {
     fc.assert(
       fc.property(remoteImageUrlArb, (url) => {
-        // CommonMark inline destinations cannot contain unescaped
-        // parentheses; URLs needing them are outside this property's
-        // domain (they are still markdown images only when escaped).
         fc.pre(!url.includes("(") && !url.includes(")"));
         const image = renderMarkdownImage(url);
         expect(image.getAttribute("referrerpolicy")).toBe("no-referrer");

@@ -515,16 +515,6 @@ export function beginThreadMetadataTransaction({
   });
 }
 
-/**
- * ME-4 (TG10.1/10.2): failed optimistic mutations invalidate and refetch
- * instead of restoring snapshots. A snapshot restore erases any newer
- * committed state — a concurrent mutation or realtime event that wrote
- * after the snapshot was taken — and a same-value concurrent write is
- * indistinguishable from the failed optimistic write by content
- * comparison alone (the TG10.6 property demonstrated the hole). The
- * refetch brings the server-committed truth, so the cache always
- * converges.
- */
 export function rollbackThreadListMutationTransaction({
   queryClient,
   threadId,
@@ -571,7 +561,6 @@ export async function beginReorderPinnedThreadTransaction({
 export function rollbackReorderPinnedThreadTransaction({
   queryClient,
 }: RollbackPinnedThreadOrderTransactionArgs): void {
-  // ME-4 (TG10.3): invalidate and refetch — no snapshot restore.
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
   queryClient.invalidateQueries({ queryKey: sidebarNavigationQueryKey() });
 }
@@ -668,7 +657,6 @@ export function rollbackArchiveThreadsTransaction({
     return;
   }
 
-  // ME-4 (TG10.3): invalidate and refetch — no snapshot restore.
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
   queryClient.invalidateQueries({ queryKey: sidebarNavigationQueryKey() });
   for (const snapshot of transaction.previousThreads) {
@@ -734,7 +722,6 @@ export function rollbackDeleteThreadTransaction({
     return;
   }
 
-  // ME-4 (TG10.3): invalidate and refetch — no snapshot restore.
   queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
   queryClient.invalidateQueries({ queryKey: sidebarNavigationQueryKey() });

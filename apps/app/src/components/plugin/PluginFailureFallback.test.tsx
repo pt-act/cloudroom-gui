@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { PluginFailureFallback } from "./PluginFailureFallback";
+
+afterEach(cleanup);
 
 describe("PluginFailureFallback (ME-8, TG11.2)", () => {
   it("announces the failure and identifies the plugin and slot", () => {

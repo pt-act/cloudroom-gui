@@ -1,16 +1,5 @@
 import { appToast } from "@/components/ui/app-toast";
 
-/**
- * Shared compact plugin failure state (ME-8, TG11.2): rendered by plugin
- * slots whose component crashed, so a plugin failure is announced
- * (role="alert"), identified by plugin name and slot, and offers a reload
- * plus a settings path instead of silently removing the UI.
- *
- * The diagnostics reference is the slot instance key — the same key the
- * client logs use (`[plugin:<id>] slot "<key>" crashed ...`), so a
- * reported failure can be matched to its log line without exposing
- * credentials or tokens.
- */
 export function PluginFailureFallback({
   pluginId,
   slotLabel,
