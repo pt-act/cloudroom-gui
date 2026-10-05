@@ -1,3 +1,4 @@
+import { PluginFailureFallback } from "./PluginFailureFallback";
 import type { ReactNode } from "react";
 import type { ComposerView } from "@get-bb/plugin-sdk";
 import { PromptStackCard } from "@/components/promptbox/banner/PromptStackCard";
@@ -51,7 +52,12 @@ function ComposerBannerRows({
           pluginId={pluginId}
           slotKind="composerBanner"
           slotId={slotId}
-          crashFallback={<></>}
+          crashFallback={
+            <PluginFailureFallback
+              pluginId={pluginId}
+              slotLabel={`composerBanner/${slotId}`}
+            />
+          }
         >
           {banner.chrome === "bare" ? (
             <banner.component />

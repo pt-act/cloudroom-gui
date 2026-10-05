@@ -1,4 +1,5 @@
 import {
+  type ComponentProps,
   useCallback,
   useEffect,
   useId,
@@ -94,6 +95,30 @@ import { haveSameOrder, reorderStoredOrder } from "@/lib/stored-order";
 import { openPluginDetailsInWorkspace } from "./plugin-detail-opener";
 
 const MORE_TRIGGER_TEST_ID = "sidebar-navigation-more-trigger";
+const PLUGIN_REORDER_ACCESSIBILITY: ComponentProps<
+  typeof DndContext
+>["accessibility"] = {
+  screenReaderInstructions: {
+    draggable:
+      "To pick up a plugin sidebar item, press Space or Enter. While picked up, use the arrow keys to move it. Press Space or Enter again to drop it, or press Escape to cancel.",
+  },
+  announcements: {
+    onDragStart({ active }) {
+      return `Picked up plugin sidebar item ${String(active.id)}. Use the arrow keys to move, Space or Enter to drop, Escape to cancel.`;
+    },
+    onDragOver({ active, over }) {
+      return over != null
+        ? `Plugin sidebar item ${String(active.id)} moved over ${String(over?.id ?? String(over))}.`
+        : `Plugin sidebar item ${String(active.id)} is not over a drop target.`;
+    },
+    onDragEnd({ active }) {
+      return `Plugin sidebar item ${String(active.id)} dropped.`;
+    },
+    onDragCancel({ active }) {
+      return `Reordering cancelled. Plugin sidebar item ${String(active.id)} returned to its original position.`;
+    },
+  },
+};
 
 export interface SidebarNavActivationModifiers {
   metaKey: boolean;
@@ -465,7 +490,10 @@ function PluginNavSidebarItemList({
       data-testid="plugin-nav-sidebar-items"
       onClickCapture={onClickCapture}
     >
-      <DndContext {...dndContextProps}>
+      <DndContext
+        {...dndContextProps}
+        accessibility={PLUGIN_REORDER_ACCESSIBILITY}
+      >
         <SortableContext
           items={visibleKeys}
           strategy={verticalListSortingStrategy}
@@ -780,7 +808,10 @@ function SidebarNavigationCustomizeList({
       className="space-y-0.5"
       onClickCapture={onClickCapture}
     >
-      <DndContext {...dndContextProps}>
+      <DndContext
+        {...dndContextProps}
+        accessibility={PLUGIN_REORDER_ACCESSIBILITY}
+      >
         <SortableContext
           items={orderedKeys}
           strategy={verticalListSortingStrategy}
@@ -1124,8 +1155,8 @@ function SidebarNavRowChrome({
   rowStyle,
 }: SidebarNavRowChromeProps) {
   const [isActionsOpen, setIsActionsOpen] = useState(false);
-  const { onKeyDown: _keyboardDragActivator, ...pointerDragListeners } =
-    dragBindings?.listeners ?? {};
+  // ME-7 (TG11.1): the keyboard drag activator is preserved — dnd-kit's
+  // KeyboardSensor picks the row up with Space/Enter on this handle.
   const menuItems = (surface: PluginNavRowMenuSurface): ReactNode => (
     <PluginNavRowMenuItems
       surface={surface}
@@ -1167,7 +1198,7 @@ function SidebarNavRowChrome({
             aria-current={isActive ? "page" : undefined}
             ref={dragBindings?.setActivatorNodeRef}
             {...dragBindings?.attributes}
-            {...pointerDragListeners}
+            {...dragBindings?.listeners}
             onPointerDown={onPointerDown}
             onClick={onSelect}
           >

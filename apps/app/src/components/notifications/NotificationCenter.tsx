@@ -49,7 +49,7 @@ function NotificationCopyButton({
   return (
     <button
       type="button"
-      aria-label="Copy notification"
+      aria-label={copied ? "Copied" : "Copy notification"}
       className={ROW_ACTION_CLASS}
       onClick={() => {
         const text = bodyRef.current?.textContent ?? "";
@@ -64,6 +64,11 @@ function NotificationCopyButton({
       }}
     >
       <Icon name={copied ? "Check" : "Copy"} className="size-3.5" />
+      {/* LO-3 (TG11.4): polite confirmation so SR users hear the copy
+          succeed without polling the label. */}
+      <span aria-live="polite" className="sr-only">
+        {copied ? "Copied to clipboard" : ""}
+      </span>
     </button>
   );
 }
@@ -152,6 +157,7 @@ export function NotificationCenter() {
   const { open, focusedId } = useNotificationCenterState();
   const notifications = useNotifications();
   const now = Date.now();
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   useAppCommandHandler("notifications.open", () => {
     toggleNotificationCenter();
@@ -165,6 +171,18 @@ export function NotificationCenter() {
     appToast.dismiss();
   }, [open]);
 
+  // ME-9 (TG11.3): when the popover closes, return focus to the persistent
+  // invoker so keyboard users are not stranded.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (wasOpen.current && !open) {
+      triggerRef.current?.focus();
+    }
+    wasOpen.current = open;
+  }, [open]);
+
+  const contentId = "notification-center-content";
+
   return (
     <Popover
       open={open}
@@ -175,20 +193,39 @@ export function NotificationCenter() {
       }}
     >
       <PopoverAnchor asChild>
-        <div
-          aria-hidden="true"
-          className="pointer-events-none fixed bottom-4 right-4 size-0"
-        />
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label={`Notifications${
+            notifications.length > 0 ? ` (${notifications.length})` : ""
+          }`}
+          aria-expanded={open}
+          aria-controls={open ? contentId : undefined}
+          data-testid="notification-center-trigger"
+          className="fixed bottom-4 right-4 z-10 flex size-10 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-md hover:bg-accent"
+          onClick={() => {
+            toggleNotificationCenter();
+          }}
+        >
+          <Icon name="Bell" className="size-4.5" />
+          {notifications.length > 0 ? (
+            <span
+              aria-hidden="true"
+              className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium leading-none text-primary-foreground"
+            >
+              {notifications.length}
+            </span>
+          ) : null}
+        </button>
       </PopoverAnchor>
       <PopoverContent
         dismissOnOutsideInteraction={false}
         side="top"
         align="end"
-        onOpenAutoFocus={(event) => {
-          event.preventDefault();
-        }}
         mobileTitle="Notifications"
         aria-label="Notifications"
+        aria-controls={contentId}
+        id={contentId}
         data-testid="notification-center"
         className="w-96 max-w-[calc(100vw-2rem)] p-0"
         mobileClassName="p-0"

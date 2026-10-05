@@ -1,3 +1,4 @@
+import { PluginFailureFallback } from "./PluginFailureFallback";
 import { memo } from "react";
 import {
   usePluginSlots,
@@ -16,7 +17,12 @@ const PluginAppOverlay = memo(function PluginAppOverlay({
       pluginId={slot.pluginId}
       slotKind="appOverlay"
       slotId={slot.id}
-      crashFallback={null}
+      crashFallback={
+        <PluginFailureFallback
+          pluginId={slot.pluginId}
+          slotLabel={`appOverlay/${slot.id}`}
+        />
+      }
     >
       <Component />
     </PluginSlotMount>

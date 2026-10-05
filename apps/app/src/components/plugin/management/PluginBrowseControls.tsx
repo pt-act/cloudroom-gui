@@ -261,7 +261,7 @@ export function PluginBrowseCategoryFilter({
           type="button"
           variant="outline"
           className={cn(
-            "h-8 max-w-52 gap-2 px-2.5 text-xs font-normal",
+            "h-8 min-w-0 max-w-52 sm:max-w-none gap-2 px-2.5 text-xs font-normal",
             (open || value.length > 0) && ENGAGED_CONTROL_CLASS,
           )}
           aria-label={`Filter plugins by category: ${accessibleSelectionLabel}`}
@@ -286,7 +286,7 @@ export function PluginBrowseCategoryFilter({
             className="size-3.5 shrink-0"
             aria-hidden
           />
-          <span className="min-w-0 truncate">{selectionLabel}</span>
+          <span className="min-w-0 break-words">{selectionLabel}</span>
           <Icon name="ChevronDown" className="size-3 shrink-0" aria-hidden />
         </Button>
       </PopoverTrigger>

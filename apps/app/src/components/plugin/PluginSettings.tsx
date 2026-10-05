@@ -577,7 +577,7 @@ function PluginSettingsContent({ plugin }: { plugin: PluginListItem }) {
             />
           </div>
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-semibold text-foreground">
+            <h1 className="break-words text-lg font-semibold text-foreground">
               {plugin.name ?? plugin.id}
             </h1>
             {plugin.description ? (
